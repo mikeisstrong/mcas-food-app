@@ -16,6 +16,10 @@ import os
 import argparse
 from datetime import datetime
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+
 # Add src to path so we can import nba_2x2x2
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
