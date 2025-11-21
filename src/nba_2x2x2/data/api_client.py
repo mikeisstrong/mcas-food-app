@@ -15,7 +15,7 @@ from loguru import logger
 class BallDontLieClient:
     """Client for fetching data from the BALLDONTLIE NBA API."""
 
-    BASE_URL = "https://api.balldontlie.io/api/v1"
+    BASE_URL = "https://api.balldontlie.io/v1"
 
     def __init__(self, api_key: Optional[str] = None, rate_limit_delay: float = 1.0):
         """
@@ -74,7 +74,7 @@ class BallDontLieClient:
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        season: Optional[int] = None,
+        seasons: Optional[List[int]] = None,
         per_page: int = 100,
     ) -> List[Dict[str, Any]]:
         """
@@ -83,7 +83,7 @@ class BallDontLieClient:
         Args:
             start_date: ISO format start date (YYYY-MM-DD)
             end_date: ISO format end date (YYYY-MM-DD)
-            season: NBA season year (e.g., 2023 for 2023-24 season)
+            seasons: List of NBA season years (e.g., [2023, 2024])
             per_page: Results per page (max 100)
 
         Returns:
@@ -94,15 +94,20 @@ class BallDontLieClient:
             params["start_date"] = start_date
         if end_date:
             params["end_date"] = end_date
-        if season:
-            params["season"] = season
+        if seasons:
+            params["seasons[]"] = seasons
 
         all_games = []
-        page = 0
+        cursor = None
 
         try:
+            request_count = 0
             while True:
-                params["page"] = page
+                if cursor:
+                    params["cursor"] = cursor
+                elif "cursor" in params:
+                    del params["cursor"]
+
                 self._rate_limit_wait()
                 response = self.session.get(f"{self.BASE_URL}/games", params=params)
                 response.raise_for_status()
@@ -113,16 +118,16 @@ class BallDontLieClient:
                     break
 
                 all_games.extend(games)
+                request_count += 1
                 logger.info(
-                    f"Fetched page {page + 1}: {len(games)} games (total: {len(all_games)})"
+                    f"Fetched batch {request_count}: {len(games)} games (total: {len(all_games)})"
                 )
 
-                if data.get("meta", {}).get("current_page") >= data.get("meta", {}).get(
-                    "total_pages", 1
-                ):
+                # Check for next cursor
+                meta = data.get("meta", {})
+                cursor = meta.get("next_cursor")
+                if not cursor:
                     break
-
-                page += 1
 
             logger.info(f"Total games fetched: {len(all_games)}")
             return all_games
@@ -161,7 +166,7 @@ class BallDontLieClient:
             List of all games in the season
         """
         logger.info(f"Fetching all games for season {season}")
-        return self.get_games(season=season)
+        return self.get_games(seasons=[season])
 
     def health_check(self) -> bool:
         """
