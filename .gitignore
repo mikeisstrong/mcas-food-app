@@ -49,8 +49,8 @@ htmlcov/
 logs/
 *.log
 
-# Data
-data/
+# Data (raw data files, not source code)
+/data/
 *.csv
 *.xlsx
 

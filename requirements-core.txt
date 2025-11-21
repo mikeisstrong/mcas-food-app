@@ -1,0 +1,16 @@
+# Core dependencies for 2x2x2 NBA Predictive Model (Part 1)
+# Minimal set needed for data collection and ETL
+
+# Database & ORM
+psycopg2-binary>=2.9.0
+sqlalchemy>=2.0.0
+
+# API & HTTP
+requests>=2.31.0
+
+# Configuration & Utilities
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+
+# Logging
+loguru>=0.7.0
