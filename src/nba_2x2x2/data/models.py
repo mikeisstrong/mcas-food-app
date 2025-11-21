@@ -94,3 +94,66 @@ class Game(Base):
 
     def __repr__(self):
         return f"<Game {self.away_team.abbreviation}@{self.home_team.abbreviation} on {self.game_date}>"
+
+
+class TeamGameStats(Base):
+    """Team statistics calculated for each game (walk-forward methodology)."""
+
+    __tablename__ = "team_game_stats"
+
+    id = Column(Integer, primary_key=True)
+    game_id = Column(Integer, ForeignKey("games.id"), nullable=False, index=True)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=False, index=True)
+    is_home = Column(Integer, nullable=False)  # 1 if home team, 0 if away team
+
+    # Aggregate statistics (cumulative)
+    games_played = Column(Integer, nullable=False, default=0)
+    wins = Column(Integer, nullable=False, default=0)
+    losses = Column(Integer, nullable=False, default=0)
+    win_pct = Column(Float)  # wins / games_played
+
+    # Points
+    points_for = Column(Float)  # PPF - average points scored
+    points_against = Column(Float)  # PPA - average points allowed
+    point_differential = Column(Float)  # PPF - PPA
+
+    # Rolling averages (5, 10, 20-game windows)
+    ppf_5game = Column(Float)  # 5-game rolling avg PPF
+    ppa_5game = Column(Float)  # 5-game rolling avg PPA
+    diff_5game = Column(Float)  # 5-game rolling avg differential
+
+    ppf_10game = Column(Float)  # 10-game rolling avg PPF
+    ppa_10game = Column(Float)  # 10-game rolling avg PPA
+    diff_10game = Column(Float)  # 10-game rolling avg differential
+
+    ppf_20game = Column(Float)  # 20-game rolling avg PPF
+    ppa_20game = Column(Float)  # 20-game rolling avg PPA
+    diff_20game = Column(Float)  # 20-game rolling avg differential
+
+    # ELO Rating
+    elo_rating = Column(Float, nullable=False, default=1500.0)  # Starts at 1500
+
+    # Rest indicators
+    days_rest = Column(Integer)  # Days since last game (excluding rest days)
+    back_to_back = Column(Integer, default=0)  # 1 if playing back-to-back, 0 otherwise
+
+    # Game outcome
+    game_won = Column(Integer)  # 1 if team won this game, 0 if lost
+    points_scored = Column(Integer)  # Points scored in this game
+    points_allowed = Column(Integer)  # Points allowed in this game
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    game = relationship("Game", foreign_keys=[game_id])
+    team = relationship("Team", foreign_keys=[team_id])
+
+    # Unique constraint: one entry per team per game
+    __table_args__ = (
+        UniqueConstraint("game_id", "team_id", name="uq_team_game_stats"),
+        Index("idx_team_game_date", "team_id", "game_id"),
+    )
+
+    def __repr__(self):
+        return f"<TeamGameStats Team={self.team_id} Game={self.game_id} ELO={self.elo_rating:.1f}>"
