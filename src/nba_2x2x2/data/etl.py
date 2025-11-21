@@ -43,25 +43,26 @@ class NBADataETL:
             updated_count = 0
 
             for api_team in api_teams:
-                # Check if team already exists
+                # Check if team already exists by abbreviation (upsert key)
                 existing_team = self.session.query(Team).filter(
-                    Team.id == api_team["id"]
+                    Team.abbreviation == api_team["abbreviation"]
                 ).first()
 
                 team_data = {
                     "id": api_team["id"],
                     "abbreviation": api_team["abbreviation"],
-                    "city": api_team["city"],
-                    "conference": api_team["conference"],
-                    "division": api_team["division"],
-                    "full_name": api_team["full_name"],
-                    "name": api_team["name"],
+                    "city": api_team.get("city", ""),
+                    "conference": api_team.get("conference", ""),
+                    "division": api_team.get("division", ""),
+                    "full_name": api_team.get("full_name", ""),
+                    "name": api_team.get("name", ""),
                 }
 
                 if existing_team:
                     # Update existing team
                     for key, value in team_data.items():
-                        setattr(existing_team, key, value)
+                        if key != "id":  # Don't update ID
+                            setattr(existing_team, key, value)
                     updated_count += 1
                 else:
                     # Create new team
