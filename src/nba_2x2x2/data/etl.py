@@ -29,28 +29,42 @@ class NBADataETL:
     def load_teams(self) -> Tuple[int, int]:
         """
         Fetch teams from API and load into database.
+        Only loads current NBA teams (30 teams).
 
         Returns:
             Tuple of (new_teams_count, updated_teams_count)
         """
+        # Current NBA teams (30 total)
+        CURRENT_NBA_TEAMS = {
+            "ATL", "BOS", "BKN", "CHA", "CHI", "CLE", "DAL", "DEN", "DET", "GSW",
+            "HOU", "LAC", "LAL", "MEM", "MIA", "MIL", "MIN", "NOP", "NYK", "OKC",
+            "ORL", "PHI", "PHX", "POR", "SAC", "SAS", "TOR", "UTA", "WAS", "IND"
+        }
+
         logger.info("Loading teams from BALLDONTLIE API...")
 
         try:
             api_teams = self.api_client.get_teams()
-            logger.info(f"Fetched {len(api_teams)} teams from API")
+            logger.info(f"Fetched {len(api_teams)} teams from API, filtering for {len(CURRENT_NBA_TEAMS)} current NBA teams")
 
             new_count = 0
             updated_count = 0
 
             for api_team in api_teams:
+                # Only load current NBA teams
+                abbreviation = api_team.get("abbreviation", "").upper()
+                if abbreviation not in CURRENT_NBA_TEAMS:
+                    logger.debug(f"Skipping non-current team: {abbreviation}")
+                    continue
+
                 # Check if team already exists by abbreviation (upsert key)
                 existing_team = self.session.query(Team).filter(
-                    Team.abbreviation == api_team["abbreviation"]
+                    Team.abbreviation == abbreviation
                 ).first()
 
                 team_data = {
                     "id": api_team["id"],
-                    "abbreviation": api_team["abbreviation"],
+                    "abbreviation": abbreviation,
                     "city": api_team.get("city", ""),
                     "conference": api_team.get("conference", ""),
                     "division": api_team.get("division", ""),
