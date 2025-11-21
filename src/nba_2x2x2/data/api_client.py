@@ -17,16 +17,16 @@ class BallDontLieClient:
 
     BASE_URL = "https://api.balldontlie.io/api/v1"
 
-    def __init__(self, api_key: Optional[str] = None, rate_limit_delay: float = 0.1):
+    def __init__(self, api_key: Optional[str] = None, rate_limit_delay: float = 1.0):
         """
         Initialize API client.
 
         Args:
             api_key: BALLDONTLIE API key (defaults to env var)
-            rate_limit_delay: Delay in seconds between API requests
+            rate_limit_delay: Delay in seconds between API requests (60 req/min = 1 sec per request)
         """
         self.api_key = api_key or os.getenv("BALLDONTLIE_API_KEY", "")
-        self.rate_limit_delay = rate_limit_delay
+        self.rate_limit_delay = rate_limit_delay  # 1.0 second = 60 requests per minute
         self.last_request_time = 0
 
         self.session = requests.Session()
