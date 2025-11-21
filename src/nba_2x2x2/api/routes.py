@@ -5,9 +5,12 @@ Flask routes for exposing NBA metrics and data.
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func, desc
 from loguru import logger
+import pandas as pd
 
 from nba_2x2x2.data import DatabaseManager
 from nba_2x2x2.data.models import TeamGameStats, Game, Team
+from nba_2x2x2.ml.models import GamePredictor
+from nba_2x2x2.ml.features import FeatureEngineer
 
 # Create blueprint
 api_bp = Blueprint("api", __name__, url_prefix="/api/v1")
@@ -291,5 +294,122 @@ def get_ppf_leaderboard():
                 for idx, (stats, team) in enumerate(leaders)
             ]
         )
+    finally:
+        session.close()
+
+
+@api_bp.route("/predict/game", methods=["POST"])
+def predict_game():
+    """Predict outcome of a game given home and away team IDs."""
+    session = db_manager.get_session()
+    try:
+        data = request.get_json()
+        if not data or "home_team_id" not in data or "away_team_id" not in data:
+            return jsonify({"error": "Missing home_team_id or away_team_id"}), 400
+
+        home_team_id = data["home_team_id"]
+        away_team_id = data["away_team_id"]
+
+        # Get latest stats for both teams
+        home_stats = (
+            session.query(TeamGameStats)
+            .filter(TeamGameStats.team_id == home_team_id)
+            .order_by(desc(TeamGameStats.game_id))
+            .first()
+        )
+        away_stats = (
+            session.query(TeamGameStats)
+            .filter(TeamGameStats.team_id == away_team_id)
+            .order_by(desc(TeamGameStats.game_id))
+            .first()
+        )
+
+        if not home_stats or not away_stats:
+            return jsonify({"error": "Stats not found for one or both teams"}), 404
+
+        # Build feature vector
+        features = {
+            # Home team metrics
+            'home_elo': home_stats.elo_rating,
+            'home_ppf': home_stats.points_for,
+            'home_ppa': home_stats.points_against,
+            'home_point_diff': home_stats.point_differential,
+            'home_win_pct': home_stats.win_pct,
+            'home_ppf_5game': home_stats.ppf_5game or 0,
+            'home_ppa_5game': home_stats.ppa_5game or 0,
+            'home_diff_5game': home_stats.diff_5game or 0,
+            'home_ppf_10game': home_stats.ppf_10game or 0,
+            'home_ppa_10game': home_stats.ppa_10game or 0,
+            'home_diff_10game': home_stats.diff_10game or 0,
+            'home_ppf_20game': home_stats.ppf_20game or 0,
+            'home_ppa_20game': home_stats.ppa_20game or 0,
+            'home_diff_20game': home_stats.diff_20game or 0,
+            'home_days_rest': home_stats.days_rest or 0,
+            'home_back_to_back': home_stats.back_to_back,
+            # Away team metrics
+            'away_elo': away_stats.elo_rating,
+            'away_ppf': away_stats.points_for,
+            'away_ppa': away_stats.points_against,
+            'away_point_diff': away_stats.point_differential,
+            'away_win_pct': away_stats.win_pct,
+            'away_ppf_5game': away_stats.ppf_5game or 0,
+            'away_ppa_5game': away_stats.ppa_5game or 0,
+            'away_diff_5game': away_stats.diff_5game or 0,
+            'away_ppf_10game': away_stats.ppf_10game or 0,
+            'away_ppa_10game': away_stats.ppa_10game or 0,
+            'away_diff_10game': away_stats.diff_10game or 0,
+            'away_ppf_20game': away_stats.ppf_20game or 0,
+            'away_ppa_20game': away_stats.ppa_20game or 0,
+            'away_diff_20game': away_stats.diff_20game or 0,
+            'away_days_rest': away_stats.days_rest or 0,
+            'away_back_to_back': away_stats.back_to_back,
+        }
+
+        # Add interaction features
+        features['elo_diff'] = features['home_elo'] - features['away_elo']
+        features['ppf_diff'] = features['home_ppf'] - features['away_ppf']
+        features['ppa_diff'] = features['home_ppa'] - features['away_ppa']
+        features['diff_5game_diff'] = features['home_diff_5game'] - features['away_diff_5game']
+        features['diff_10game_diff'] = features['home_diff_10game'] - features['away_diff_10game']
+        features['diff_20game_diff'] = features['home_diff_20game'] - features['away_diff_20game']
+
+        # Create DataFrame and make prediction
+        X = pd.DataFrame([features])
+        predictor = GamePredictor(model_dir="models")
+        predictor.load_lightgbm_model()
+
+        if predictor.lgb_model is None:
+            return jsonify({"error": "Model not loaded"}), 500
+
+        # Get prediction
+        pred_prob = predictor.predict(X, model_type="lightgbm")[0]
+        pred_binary = 1 if pred_prob > 0.5 else 0
+
+        home_team = session.query(Team).filter(Team.id == home_team_id).first()
+        away_team = session.query(Team).filter(Team.id == away_team_id).first()
+
+        return jsonify(
+            {
+                "home_team": {
+                    "id": home_team_id,
+                    "name": home_team.full_name if home_team else "Unknown",
+                    "abbreviation": home_team.abbreviation if home_team else "?",
+                },
+                "away_team": {
+                    "id": away_team_id,
+                    "name": away_team.full_name if away_team else "Unknown",
+                    "abbreviation": away_team.abbreviation if away_team else "?",
+                },
+                "prediction": {
+                    "home_team_win_probability": round(pred_prob, 4),
+                    "away_team_win_probability": round(1 - pred_prob, 4),
+                    "predicted_winner": home_team.abbreviation if pred_binary == 1 else away_team.abbreviation,
+                    "confidence": round(max(pred_prob, 1 - pred_prob), 4),
+                },
+                "model": "LightGBM",
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         session.close()

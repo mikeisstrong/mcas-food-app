@@ -66,6 +66,7 @@ if __name__ == "__main__":
     logger.info("  GET  /api/v1/games - Recent games with optional filters")
     logger.info("  GET  /api/v1/leaderboard/elo - ELO ratings leaderboard")
     logger.info("  GET  /api/v1/leaderboard/ppf - Points-for leaderboard")
+    logger.info("  POST /api/v1/predict/game - Predict game outcome (home_team_id, away_team_id)")
     logger.info("=" * 80)
 
     app.run(debug=True, host="0.0.0.0", port=5000)
