@@ -1,0 +1,169 @@
+================================================================================
+MCAS FOOD ASSESSMENT SYSTEM - QUICK START
+================================================================================
+
+This is an AI-powered MCAS/Histamine Intolerance food assessment tool built on:
+- SIGHI Database (400+ foods with compatibility ratings)
+- OpenAI GPT-4 (intelligent assessment of unknown foods)
+- Flask Backend (Python API)
+- Modern Frontend (HTML/JavaScript with responsive design)
+
+================================================================================
+SETUP (2 minutes)
+================================================================================
+
+1. INSTALL DEPENDENCIES:
+   pip install -r requirements-mcas.txt
+
+2. VERIFY .env FILE EXISTS:
+   Check that .env contains OPENAI_API_KEY (already added)
+
+3. START THE API SERVER:
+   python mcas_food_api.py
+
+   Expected output:
+   * Running on http://localhost:5000
+
+4. OPEN THE FRONTEND:
+   Open mcas_app.html in your web browser
+   - Or: open mcas_app.html (macOS)
+   - Or: Double-click the file in finder/explorer
+
+================================================================================
+USAGE
+================================================================================
+
+SEARCH & ASSESS:
+1. Type a food name (e.g., "chicken breast", "tomato sauce", "blue cheese")
+2. Click "Assess" or press Enter
+3. Get instant results with:
+   - SIGHI rating (0-3)
+   - AI assessment with confidence
+   - Reaction probability percentage
+   - Mechanisms involved (H, H!, A, L, B)
+   - Preparation recommendations
+   - Similar foods in database
+
+BROWSE DATABASE:
+1. See 400+ foods from SIGHI
+2. Filter by rating (0 = safe, 3 = avoid)
+3. Click any food to analyze it
+4. View database statistics
+
+================================================================================
+RATING SCALE
+================================================================================
+
+0  - SAFE: Well tolerated, eat normally
+1  - CAUTION: Minor symptoms possible, test in small amounts
+2  - INCOMPATIBLE: Significant symptoms likely, avoid
+3  - VERY POOR: Severe symptoms expected, strictly avoid
+
+================================================================================
+WHAT IT ANALYZES
+================================================================================
+
+H!  = Highly perishable (fresh meat)
+H   = High histamine (aged cheese, fermented foods)
+A   = Biogenic amines (citrus, chocolate, nuts)
+L   = Histamine liberators (tomatoes, strawberries, shellfish)
+B   = DAO inhibitors/blockers (fermented, alcohol)
+
+================================================================================
+EXAMPLE SEARCHES
+================================================================================
+
+Try these:
+- "chicken" → Rating 0 (fresh = safe)
+- "chicken salad" → Rating depends on ingredients
+- "aged cheddar" → Rating 2-3 (high histamine)
+- "tomato sauce" → Rating 2 (liberator)
+- "fresh salmon" → Rating 0 (if very fresh)
+- "canned tuna" → Rating 3 (very high histamine)
+- "strawberries" → Rating 2 (liberator)
+- "rice" → Rating 0 (safe)
+- "coffee" → Rating 1 (mast cell activating)
+- "blue cheese" → Rating 2-3 (very high)
+
+================================================================================
+FILES CREATED
+================================================================================
+
+mcas_food_api.py              - Flask backend API (runs on localhost:5000)
+mcas_app.html                 - Frontend interface (open in browser)
+sighi_food_database.json      - Complete SIGHI food database (400+ foods)
+requirements-mcas.txt         - Python dependencies
+MCAS_SETUP.md                - Detailed setup & technical documentation
+MCAS_QUICKSTART.txt          - This file
+
+================================================================================
+API ENDPOINTS (for advanced use)
+================================================================================
+
+POST /api/assess-food
+  Input: {"food_name": "chicken"}
+  Returns: SIGHI data + LLM assessment
+
+GET /api/search-foods?q=tomato
+  Returns: Foods matching query
+
+GET /api/foods-by-rating?rating=2
+  Returns: All foods with that rating
+
+GET /api/foods-by-category
+  Returns: Foods grouped by category
+
+GET /api/database-stats
+  Returns: Database statistics
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+ERROR: "Cannot connect to API"
+FIX:   1. Make sure python mcas_food_api.py is running
+       2. Check port 5000 is not blocked
+       3. Verify API key in .env
+
+ERROR: "OpenAI API Error"
+FIX:   1. Verify API key in .env is correct
+       2. Check you have GPT-4 access
+       3. Ensure you have API credits
+
+ERROR: "No results found"
+FIX:   1. Try different spelling/name
+       2. Browse database to find similar food
+       3. Try more specific name (e.g., "cherry" not just "fruit")
+
+================================================================================
+IMPORTANT NOTES
+================================================================================
+
+⚠️  This tool provides information only, not medical advice
+⚠️  Individual tolerance varies - keep a personal food log
+⚠️  Always consult your healthcare provider
+⚠️  Test foods individually and note your reactions
+⚠️  Freshness matters - stored foods have more histamine
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Start the API: python mcas_food_api.py
+2. Open mcas_app.html in browser
+3. Test with known foods (e.g., "chicken")
+4. Try unknown foods to see AI assessment
+5. Browse database by rating
+6. Bookmark for daily use
+
+================================================================================
+SUPPORT
+================================================================================
+
+Database Source: SIGHI (Swiss Interest Group Histamine Intolerance)
+Website: www.mastzellaktivierung.info
+Updated: April 1, 2023
+
+Questions? See MCAS_SETUP.md for detailed documentation.
+
+================================================================================
