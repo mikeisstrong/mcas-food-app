@@ -1,6 +1,0 @@
-[build]
-cmds = ["pip install -r requirements-mcas.txt"]
-
-[start]
-cmd = "python mcas_food_api.py"
-# Deployment trigger
