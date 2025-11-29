@@ -15,6 +15,8 @@ from nba_2x2x2.data.models import Game, TeamGameStats, Team
 class FeatureEngineer:
     """Extract and engineer features for model training."""
 
+    ELO_INITIAL = 1500.0
+
     # Feature columns to use
     FEATURE_COLUMNS = [
         # Home team metrics
@@ -66,6 +68,29 @@ class FeatureEngineer:
         """Initialize feature engineer."""
         self.session = session
 
+    def _get_pre_game_elo(self, team_id: int, game: Game) -> float:
+        """
+        Get the team's ELO prior to the specified game.
+
+        Uses the most recent TeamGameStats row before this game (by date and id)
+        to avoid leaking post-game ELO from the game we're predicting.
+        """
+        stats = (
+            self.session.query(TeamGameStats)
+            .join(Game, TeamGameStats.game_id == Game.id)
+            .filter(TeamGameStats.team_id == team_id)
+            .filter(
+                (Game.game_date < game.game_date)
+                | ((Game.game_date == game.game_date) & (Game.id < game.id))
+            )
+            .order_by(Game.game_date.desc(), Game.id.desc())
+            .first()
+        )
+
+        if stats:
+            return stats.elo_rating
+        return self.ELO_INITIAL
+
     def extract_features(self, game: Game) -> dict:
         """Extract features for a single game."""
         home_stats = (
@@ -84,7 +109,7 @@ class FeatureEngineer:
 
         features = {
             # Home team metrics
-            'home_elo': home_stats.elo_rating,
+            'home_elo': self._get_pre_game_elo(game.home_team_id, game),
             'home_ppf': home_stats.points_for,
             'home_ppa': home_stats.points_against,
             'home_point_diff': home_stats.point_differential,
@@ -102,7 +127,7 @@ class FeatureEngineer:
             'home_back_to_back': home_stats.back_to_back,
 
             # Away team metrics
-            'away_elo': away_stats.elo_rating,
+            'away_elo': self._get_pre_game_elo(game.away_team_id, game),
             'away_ppf': away_stats.points_for,
             'away_ppa': away_stats.points_against,
             'away_point_diff': away_stats.point_differential,

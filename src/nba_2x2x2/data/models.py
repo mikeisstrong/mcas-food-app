@@ -130,6 +130,10 @@ class TeamGameStats(Base):
     ppa_20game = Column(Float)  # 20-game rolling avg PPA
     diff_20game = Column(Float)  # 20-game rolling avg differential
 
+    ppf_100game = Column(Float)  # 100-game rolling avg PPF
+    ppa_100game = Column(Float)  # 100-game rolling avg PPA
+    diff_100game = Column(Float)  # 100-game rolling avg differential
+
     # ELO Rating
     elo_rating = Column(Float, nullable=False, default=1500.0)  # Starts at 1500
 
@@ -137,10 +141,8 @@ class TeamGameStats(Base):
     days_rest = Column(Integer)  # Days since last game (excluding rest days)
     back_to_back = Column(Integer, default=0)  # 1 if playing back-to-back, 0 otherwise
 
-    # Game outcome
+    # Game outcome (stored for reference but NOT used in feature calculation)
     game_won = Column(Integer)  # 1 if team won this game, 0 if lost
-    points_scored = Column(Integer)  # Points scored in this game
-    points_allowed = Column(Integer)  # Points allowed in this game
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -157,3 +159,36 @@ class TeamGameStats(Base):
 
     def __repr__(self):
         return f"<TeamGameStats Team={self.team_id} Game={self.game_id} ELO={self.elo_rating:.1f}>"
+
+
+class GamePrediction(Base):
+    """Model predictions for each game."""
+
+    __tablename__ = "game_predictions"
+
+    id = Column(Integer, primary_key=True)
+    game_id = Column(Integer, ForeignKey("games.id"), nullable=False, unique=True, index=True)
+
+    # Home team win probability (blended: 70% LightGBM + 30% ELO)
+    home_win_prob = Column(Float, nullable=False)
+
+    # Away team win probability (1 - home_win_prob)
+    away_win_prob = Column(Float, nullable=False)
+
+    # Point differential prediction (home team perspective)
+    # Positive = home team expected to win by X points
+    # Negative = home team expected to lose by X points
+    point_differential = Column(Float, nullable=False)
+
+    # Component scores for transparency
+    lightgbm_home_prob = Column(Float)  # 70% weight
+    elo_home_prob = Column(Float)  # 30% weight
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    game = relationship("Game", foreign_keys=[game_id])
+
+    def __repr__(self):
+        return f"<GamePrediction Game={self.game_id} HomeProb={self.home_win_prob:.1%} Diff={self.point_differential:+.1f}>"

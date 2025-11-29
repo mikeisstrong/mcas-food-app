@@ -1,0 +1,37 @@
+# Core dependencies - tested and working on Python 3.13 + macOS
+# Database & ORM
+psycopg2-binary==2.9.11
+sqlalchemy==2.0.44
+
+# API & HTTP
+requests==2.32.5
+fastapi==0.109.1
+uvicorn==0.27.0
+
+# Data processing (pre-built wheels for faster install)
+pandas==2.2.1
+numpy==1.26.4
+
+# Configuration & Utilities
+python-dotenv==1.2.1
+pydantic==2.12.4
+
+# Logging & Debugging
+loguru==0.7.3
+
+# Machine Learning (optional - pre-built versions)
+lightgbm==4.1.1
+# scikit-learn - skip for now due to compilation issues on M1/M2
+
+# API & Frontend (optional)
+flask==3.0.3
+streamlit==1.39.0
+
+# Development & Testing
+pytest==7.4.4
+black==24.10.0
+flake8==7.1.1
+mypy==1.14.1
+
+# Rate limiting (for MP3 when ready)
+slowapi==0.1.9

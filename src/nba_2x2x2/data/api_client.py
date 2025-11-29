@@ -3,7 +3,6 @@ BALLDONTLIE NBA API client.
 Handles fetching teams, games, and player stats from the public API.
 """
 
-import os
 import time
 from typing import Optional, List, Dict, Any
 import requests
@@ -11,22 +10,24 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from loguru import logger
 
+from nba_2x2x2.config import Config
+
 
 class BallDontLieClient:
     """Client for fetching data from the BALLDONTLIE NBA API."""
 
     BASE_URL = "https://api.balldontlie.io/v1"
 
-    def __init__(self, api_key: Optional[str] = None, rate_limit_delay: float = 1.0):
+    def __init__(self, api_key: Optional[str] = None, rate_limit_delay: Optional[float] = None):
         """
         Initialize API client.
 
         Args:
-            api_key: BALLDONTLIE API key (defaults to env var)
-            rate_limit_delay: Delay in seconds between API requests (60 req/min = 1 sec per request)
+            api_key: BALLDONTLIE API key (defaults to config)
+            rate_limit_delay: Delay in seconds between API requests (defaults to config)
         """
-        self.api_key = api_key or os.getenv("BALLDONTLIE_API_KEY", "")
-        self.rate_limit_delay = rate_limit_delay  # 1.0 second = 60 requests per minute
+        self.api_key = api_key or Config.BALLDONTLIE_API_KEY
+        self.rate_limit_delay = rate_limit_delay or Config.API_RATE_LIMIT_DELAY
         self.last_request_time = 0
 
         self.session = requests.Session()

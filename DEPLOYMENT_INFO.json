@@ -1,0 +1,10 @@
+{
+  "github_repo": "https://github.com/mikeisstrong/mcas-food-app",
+  "github_user": "mikeisstrong",
+  "repo_name": "mcas-food-app",
+  "env_vars": {
+    "OPENAI_API_KEY": "YOUR_API_KEY_HERE"
+  },
+  "start_command": "python mcas_food_api.py",
+  "requirements_file": "requirements-mcas.txt"
+}

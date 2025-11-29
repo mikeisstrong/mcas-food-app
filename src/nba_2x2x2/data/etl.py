@@ -141,6 +141,16 @@ class NBADataETL:
                         Game.game_date == game_date,
                     ).first()
 
+                    # Determine game status: scheduled games (future dates) should not be marked as final
+                    # even if they have projected scores in the API response
+                    today = datetime.now().date()
+                    game_date_obj = datetime.strptime(game_date, "%Y-%m-%d").date()
+
+                    if game_date_obj > today:
+                        status = "scheduled"
+                    else:
+                        status = api_game["status"]  # Use API status for past/today games
+
                     game_data = {
                         "id": api_game["id"],
                         "home_team_id": home_team_id,
@@ -150,7 +160,7 @@ class NBADataETL:
                         "game_date": game_date,
                         "game_datetime": api_game["date"],
                         "season": season,
-                        "status": api_game["status"],
+                        "status": status,
                         "period": api_game.get("period"),
                         "time": api_game.get("time"),
                         "postseason": 1 if api_game.get("postseason", False) else 0,

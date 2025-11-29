@@ -12,6 +12,8 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, f1_score
 from loguru import logger
 
+from nba_2x2x2.config import Config
+
 try:
     import lightgbm as lgb
     LIGHTGBM_AVAILABLE = True
@@ -93,19 +95,8 @@ class GamePredictor:
 
         logger.info("Training LightGBM model...")
 
-        default_params = {
-            "objective": "binary",
-            "metric": "binary_logloss",
-            "boosting_type": "gbdt",
-            "num_leaves": 31,
-            "learning_rate": 0.05,
-            "max_depth": 10,
-            "min_data_in_leaf": 20,
-            "feature_fraction": 0.8,
-            "bagging_fraction": 0.8,
-            "bagging_freq": 5,
-            "verbose": -1,
-        }
+        # Get default parameters from configuration
+        default_params = Config.get_lightgbm_params()
 
         if params:
             default_params.update(params)
@@ -116,11 +107,11 @@ class GamePredictor:
         self.lgb_model = lgb.train(
             default_params,
             train_data,
-            num_boost_round=500,
+            num_boost_round=Config.LIGHTGBM_NUM_BOOST_ROUND,
             valid_sets=[valid_data],
             valid_names=["test"],
             callbacks=[
-                lgb.early_stopping(50),
+                lgb.early_stopping(Config.LIGHTGBM_EARLY_STOPPING_ROUNDS),
                 lgb.log_evaluation(period=0),
             ],
         )

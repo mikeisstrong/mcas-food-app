@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: mcas-food-app
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements-mcas.txt
+    startCommand: python mcas_food_api.py
+    envVars:
+      - key: OPENAI_API_KEY
+        scope: build,run
+        value: # Set this in Render dashboard
+      - key: PORT
+        scope: run
+        value: 3000

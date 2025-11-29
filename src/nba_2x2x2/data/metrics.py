@@ -66,30 +66,26 @@ class MetricsCalculator:
         home_b2b = self._is_back_to_back(home_team.id, game.game_date)
         away_b2b = self._is_back_to_back(away_team.id, game.game_date)
 
-        # Home team stats
+        # Home team stats (using only pre-game information)
         home_stats = self._calculate_team_stats(
             game_id=game.id,
             team_id=home_team.id,
             is_home=1,
             prev_games=prev_games_home,
             game_won=1 if home_won else 0,
-            points_scored=game.home_team_score,
-            points_allowed=game.away_team_score,
             days_rest=home_rest,
             back_to_back=1 if home_b2b else 0,
             opponent_id=away_team.id,
             game_date=game.game_date,
         )
 
-        # Away team stats
+        # Away team stats (using only pre-game information)
         away_stats = self._calculate_team_stats(
             game_id=game.id,
             team_id=away_team.id,
             is_home=0,
             prev_games=prev_games_away,
             game_won=1 if away_won else 0,
-            points_scored=game.away_team_score,
-            points_allowed=game.home_team_score,
             days_rest=away_rest,
             back_to_back=1 if away_b2b else 0,
             opponent_id=home_team.id,
@@ -132,55 +128,57 @@ class MetricsCalculator:
         is_home: int,
         prev_games: List[Dict],
         game_won: int,
-        points_scored: int,
-        points_allowed: int,
         days_rest: int,
         back_to_back: int,
         opponent_id: int,
         game_date,
     ) -> Dict:
-        """Calculate all stats for a team in a specific game."""
+        """
+        Calculate all stats for a team in a specific game.
 
-        # Get opponent's ELO rating
+        CRITICAL: Uses ONLY prior games to prevent data leakage.
+        Current game outcome is stored but NOT used in calculations.
+        """
+
+        # Get opponent's ELO rating (pre-game)
         opponent_elo = self._get_latest_elo(opponent_id, game_date)
 
-        # Calculate cumulative stats
-        games_played = len(prev_games) + 1
-        wins = sum(1 for g in prev_games if g["won"]) + game_won
+        # Calculate cumulative stats using ONLY prior games
+        games_played = len(prev_games)
+        wins = sum(1 for g in prev_games if g["won"])
         losses = games_played - wins
         win_pct = wins / games_played if games_played > 0 else 0.0
 
-        # Calculate aggregate points
-        total_pf = sum(g["pf"] for g in prev_games) + points_scored
-        total_pa = sum(g["pa"] for g in prev_games) + points_allowed
+        # Calculate aggregate points using ONLY prior games
+        total_pf = sum(g["pf"] for g in prev_games)
+        total_pa = sum(g["pa"] for g in prev_games)
         ppf = total_pf / games_played if games_played > 0 else 0.0
         ppa = total_pa / games_played if games_played > 0 else 0.0
         point_diff = ppf - ppa
 
-        # Calculate rolling averages
-        ppf_5 = self._rolling_average([g["pf"] for g in prev_games[-4:]] + [points_scored])
-        ppa_5 = self._rolling_average([g["pa"] for g in prev_games[-4:]] + [points_allowed])
-        diff_5 = ppf_5 - ppa_5 if ppf_5 and ppa_5 else None
+        # Calculate rolling averages using ONLY prior games (NO current game)
+        ppf_5 = self._rolling_average([g["pf"] for g in prev_games[-5:]])
+        ppa_5 = self._rolling_average([g["pa"] for g in prev_games[-5:]])
+        diff_5 = ppf_5 - ppa_5 if ppf_5 is not None and ppa_5 is not None else None
 
-        ppf_10 = self._rolling_average(
-            [g["pf"] for g in prev_games[-9:]] + [points_scored]
-        )
-        ppa_10 = self._rolling_average(
-            [g["pa"] for g in prev_games[-9:]] + [points_allowed]
-        )
-        diff_10 = ppf_10 - ppa_10 if ppf_10 and ppa_10 else None
+        ppf_10 = self._rolling_average([g["pf"] for g in prev_games[-10:]])
+        ppa_10 = self._rolling_average([g["pa"] for g in prev_games[-10:]])
+        diff_10 = ppf_10 - ppa_10 if ppf_10 is not None and ppa_10 is not None else None
 
-        ppf_20 = self._rolling_average(
-            [g["pf"] for g in prev_games[-19:]] + [points_scored]
-        )
-        ppa_20 = self._rolling_average(
-            [g["pa"] for g in prev_games[-19:]] + [points_allowed]
-        )
-        diff_20 = ppf_20 - ppa_20 if ppf_20 and ppa_20 else None
+        ppf_20 = self._rolling_average([g["pf"] for g in prev_games[-20:]])
+        ppa_20 = self._rolling_average([g["pa"] for g in prev_games[-20:]])
+        diff_20 = ppf_20 - ppa_20 if ppf_20 is not None and ppa_20 is not None else None
 
-        # Calculate new ELO rating
+        ppf_100 = self._rolling_average([g["pf"] for g in prev_games[-100:]])
+        ppa_100 = self._rolling_average([g["pa"] for g in prev_games[-100:]])
+        diff_100 = ppf_100 - ppa_100 if ppf_100 is not None and ppa_100 is not None else None
+
+        # Get pre-game ELO rating
         team_elo = self._get_latest_elo(team_id, game_date)
-        new_elo = self._calculate_elo(team_elo, opponent_elo, game_won)
+
+        # Calculate post-game ELO (updated with this game's result)
+        # This is what gets stored and retrieved for future games
+        post_game_elo = self._calculate_elo(team_elo, opponent_elo, game_won)
 
         return {
             "game_id": game_id,
@@ -202,12 +200,13 @@ class MetricsCalculator:
             "ppf_20game": ppf_20,
             "ppa_20game": ppa_20,
             "diff_20game": diff_20,
-            "elo_rating": new_elo,
+            "ppf_100game": ppf_100,
+            "ppa_100game": ppa_100,
+            "diff_100game": diff_100,
+            "elo_rating": post_game_elo,
             "days_rest": days_rest,
             "back_to_back": back_to_back,
             "game_won": game_won,
-            "points_scored": points_scored,
-            "points_allowed": points_allowed,
         }
 
     def _get_prev_games(self, team_id: int, game_date) -> List[Dict]:

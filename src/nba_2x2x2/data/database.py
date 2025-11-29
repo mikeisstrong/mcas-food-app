@@ -3,12 +3,13 @@ Database connection and management for PostgreSQL.
 Handles initialization, connection pooling, and ORM setup.
 """
 
-import os
 from typing import Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
 from loguru import logger
+
+from nba_2x2x2.config import Config
 
 
 class DatabaseManager:
@@ -26,17 +27,17 @@ class DatabaseManager:
         Initialize database manager.
 
         Args:
-            host: Database host (defaults to env var or 'localhost')
-            port: Database port (defaults to env var or 5432)
-            database: Database name (defaults to env var)
-            user: Database user (defaults to env var)
-            password: Database password (defaults to env var)
+            host: Database host (defaults to config)
+            port: Database port (defaults to config)
+            database: Database name (defaults to config)
+            user: Database user (defaults to config)
+            password: Database password (defaults to config)
         """
-        self.host = host or os.getenv("DB_HOST", "localhost")
-        self.port = port or int(os.getenv("DB_PORT", "5432"))
-        self.database = database or os.getenv("DB_NAME", "nba_2x2x2")
-        self.user = user or os.getenv("DB_USER", "postgres")
-        self.password = password or os.getenv("DB_PASSWORD", "")
+        self.host = host or Config.DB_HOST
+        self.port = port or Config.DB_PORT
+        self.database = database or Config.DB_NAME
+        self.user = user or Config.DB_USER
+        self.password = password or Config.DB_PASSWORD
 
         self.engine = None
         self.session_factory = None
@@ -50,13 +51,21 @@ class DatabaseManager:
                 f"@{self.host}:{self.port}/{self.database}"
             )
 
+            connect_args = {
+                "connect_timeout": Config.DB_CONNECT_TIMEOUT,
+            }
+
+            # Add SSL mode if not disabled
+            if Config.DB_SSL_MODE != "disable":
+                connect_args["sslmode"] = Config.DB_SSL_MODE
+
             self.engine = create_engine(
                 connection_string,
                 poolclass=QueuePool,
-                pool_size=5,
-                max_overflow=10,
+                pool_size=Config.DB_POOL_SIZE,
+                max_overflow=Config.DB_MAX_OVERFLOW,
                 echo=False,
-                connect_args={"connect_timeout": 10},
+                connect_args=connect_args,
             )
 
             self.session_factory = sessionmaker(bind=self.engine)
