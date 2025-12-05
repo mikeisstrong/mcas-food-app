@@ -140,7 +140,7 @@ def assess_food_single_prompt(food_name, database_info, perspective="general"):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5-nano",
             max_tokens=1000,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -217,7 +217,7 @@ RESPOND WITH ONLY THIS JSON:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5-nano",
             max_tokens=1200,
             messages=[{"role": "user", "content": synthesis_prompt}]
         )
