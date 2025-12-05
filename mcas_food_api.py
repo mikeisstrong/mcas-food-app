@@ -90,43 +90,47 @@ def build_food_context():
 
 def generate_assessment_prompt(food_name, database_info, perspective="general"):
     """
-    Generate one of three different assessment prompt perspectives
+    Generate one of three different assessment prompt perspectives with detailed context but structured output
     perspective: "general", "histamine_risk", or "mechanism_analysis"
     """
-    base_context = f"""MCAS/HIT Expert Assessment - {food_name}
+    base_context = f"""You are an expert in Mast Cell Activation Syndrome (MCAS) and histamine intolerance assessment based on SIGHI protocols.
 
-SIGHI Reference: {database_info}"""
+SIGHI Database Context:
+{database_info}
+
+Assess the food: {food_name}
+
+Your assessment MUST be conservative - when evidence is unclear or conflicting, always rate higher (worse) for patient safety.
+The mechanisms are: H=histamine content, A=other amines, L=mast cell liberators, B=DAO enzyme blockers."""
 
     if perspective == "general":
-        specific_prompt = """Assess across: SIGHI match, histamine/amines, mechanisms (H/A/L/B), preparation risks."""
+        specific_prompt = """Comprehensive perspective: Evaluate SIGHI database match (if exists), baseline histamine/amine content, all applicable mechanisms (H/A/L/B), preparation/storage risks, freshness sensitivity. Synthesize into a single overall risk rating (0-3). Consider whether food exists in SIGHI and align assessment accordingly. If in SIGHI, explain any divergence from database rating."""
 
     elif perspective == "histamine_risk":
-        specific_prompt = """Focus: baseline histamine, freshness impact, storage effects, safe prep methods."""
+        specific_prompt = """Histamine-focused perspective: Analyze baseline histamine levels in this food (fresh state), how histamine accumulates over time and storage conditions, which preparation/cooking methods reduce histamine (heat, freezing, etc.), impact of fermentation if applicable, shelf-life considerations. Rate based primarily on histamine risk (0-3) and identify freshness sensitivity."""
 
     elif perspective == "mechanism_analysis":
-        specific_prompt = """Focus: Which mechanisms? (H=histamine, A=amines, L=liberators, B=DAO blockers). Severity?"""
+        specific_prompt = """Mechanism-focused perspective: Identify which biological mechanisms this food triggers (H/A/L/B - mark all applicable), severity level of each mechanism for MCAS patients (mild/moderate/severe), cross-reactivity risks with other foods, whether mechanisms are dose-dependent or always present. Rate severity of total mechanism burden (0-3)."""
 
-    prompt = base_context + "\n" + specific_prompt + """
+    prompt = base_context + "\n\n" + specific_prompt + """
 
-JSON:
+RESPOND WITH ONLY THIS JSON (no other text):
 {
   "food_name": "%s",
   "found_in_sighi": boolean,
-  "sighi_rating": 0-3 or null,
-  "llm_assessment_rating": 0-3,
-  "confidence_percentage": 70-95,
-  "reaction_probability": "low/moderate/high/very-high",
-  "reaction_probability_percentage": 0-100,
-  "mechanisms": ["H", "A", "L", "B"],
-  "key_concerns": ["short", "list"],
-  "preparation_notes": "one sentence",
+  "sighi_rating": 0, 1, 2, 3, or null,
+  "llm_assessment_rating": 0, 1, 2, or 3,
+  "confidence_percentage": integer 70-95,
+  "reaction_probability": "low" or "moderate" or "high" or "very-high",
+  "reaction_probability_percentage": integer 0-100,
+  "mechanisms": ["H" and/or "A" and/or "L" and/or "B"],
+  "key_concerns": ["concern1", "concern2", "concern3"],
+  "preparation_notes": "single sentence",
   "freshness_dependent": boolean,
-  "scientific_explanation": "one sentence max",
-  "recommendations": "practical advice",
+  "scientific_explanation": "one sentence only",
+  "recommendations": "one sentence practical advice",
   "perspective_focus": "%s"
-}
-
-Conservative rating: when unsure, rate higher (worse).""" % (food_name, perspective)
+}""" % (food_name, perspective)
 
     return prompt
 
@@ -167,37 +171,48 @@ def synthesize_assessments(food_name, database_info, assessments, sighi_rating=N
     # Adjust prompt based on retry count and match type
     if retry_count == 0:
         if is_exact_match:
-            alignment_instruction = "CRITICAL: final_rating MUST match sighi_rating."
+            alignment_instruction = "CRITICAL: final_rating MUST match sighi_rating (exact SIGHI match is authoritative)."
         elif sighi_rating is not None:
-            alignment_instruction = f"IMPORTANT: Similar SIGHI food rated {sighi_rating}. Use as guidance."
+            alignment_instruction = f"IMPORTANT GUIDANCE: Similar SIGHI food rated {sighi_rating}. Align your final_rating to {sighi_rating} or higher (more conservative). Do not rate significantly lower than the reference."
         else:
-            alignment_instruction = "Provide best consensus from 3 assessments."
+            alignment_instruction = "No SIGHI reference. Provide your best consensus from the 3 expert perspectives."
     else:
-        alignment_instruction = f"CRITICAL: final_rating MUST be exactly {sighi_rating}. No exceptions."
+        alignment_instruction = f"CRITICAL REQUIREMENT: final_rating MUST be exactly {sighi_rating}. The previous synthesis was incorrect. This is a retry - enforce SIGHI alignment."
 
-    synthesis_prompt = f"""Synthesize 3 MCAS assessments for: {food_name}
+    synthesis_prompt = f"""You are an expert synthesizer of MCAS food assessments. Merge 3 independent expert assessments into ONE authoritative consensus.
 
-3 Expert Assessments:
+FOOD: {food_name}
+
+SIGHI DATABASE CONTEXT:
+{database_info}
+
+3 EXPERT ASSESSMENTS (General, Histamine-Risk, Mechanism-focused perspectives):
 {assessments_str}
 
-Task: Merge into ONE consensus rating. Conservative (when unsure, rate worse). {alignment_instruction}
+SYNTHESIS INSTRUCTIONS:
+1. Analyze agreement/disagreement across all 3 perspectives
+2. Identify which perspective(s) provide the most reliable information for this specific food type
+3. Create ONE consensus rating that is CONSERVATIVE - when evidence conflicts or is unclear, rate higher (worse) for patient safety
+4. {alignment_instruction}
+5. Compile ALL mechanisms mentioned across the 3 assessments into your mechanisms field
+6. Select the 3 most important key concerns synthesized from all perspectives
 
-JSON:
+RESPOND WITH ONLY THIS JSON (no explanation text):
 {{
   "food_name": "{food_name}",
   "found_in_sighi": boolean,
-  "sighi_rating": 0-3 or null,
-  "final_rating": 0-3,
+  "sighi_rating": 0, 1, 2, 3, or null,
+  "final_rating": 0, 1, 2, or 3,
   "confidence_percentage": 70-95,
-  "reaction_probability": "low/moderate/high/very-high",
+  "reaction_probability": "low" or "moderate" or "high" or "very-high",
   "reaction_probability_percentage": 0-100,
   "mechanisms": ["H", "A", "L", "B"],
-  "key_concerns": ["short", "list"],
-  "preparation_notes": "one sentence",
+  "key_concerns": ["concern1", "concern2", "concern3"],
+  "preparation_notes": "single sentence advice",
   "freshness_dependent": boolean,
-  "scientific_explanation": "one sentence",
-  "recommendations": "practical advice",
-  "synthesis_notes": "brief explanation",
+  "scientific_explanation": "one sentence explaining the rating",
+  "recommendations": "one sentence practical advice for MCAS patients",
+  "synthesis_notes": "how the 3 perspectives were merged into this consensus",
   "sighi_alignment_verified": boolean
 }}"""
 
