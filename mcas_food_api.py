@@ -44,14 +44,19 @@ def create_completion(model, messages, max_tokens):
             max_completion_tokens=max_tokens,
             messages=messages
         )
-    except (TypeError, AttributeError) as e:
-        # If max_completion_tokens fails, try max_tokens as fallback
-        logger.warning(f"max_completion_tokens failed ({e}), falling back to max_tokens")
-        return client.chat.completions.create(
-            model=model,
-            max_tokens=max_tokens,
-            messages=messages
-        )
+    except Exception as e:
+        # Check if error is about unsupported max_tokens parameter
+        error_str = str(e)
+        if "max_tokens" in error_str and "max_completion_tokens" in error_str:
+            logger.warning(f"max_completion_tokens not supported ({error_str}), trying max_tokens")
+            return client.chat.completions.create(
+                model=model,
+                max_tokens=max_tokens,
+                messages=messages
+            )
+        else:
+            # Re-raise if it's a different error
+            raise
 
 # Load SIGHI database
 with open('sighi_food_database.json', 'r') as f:
