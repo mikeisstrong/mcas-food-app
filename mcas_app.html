@@ -117,6 +117,44 @@
             font-weight: 600;
         }
 
+        .progress-container {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .progress-container.active {
+            display: block;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            animation: progress 2s ease-in-out infinite;
+        }
+
+        @keyframes progress {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #667eea;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
         .assessment-result {
             margin-top: 20px;
             padding: 20px;
@@ -445,8 +483,11 @@
                     <button onclick="assessFood()" id="assessBtn">Assess</button>
                 </div>
 
-                <div id="loadingDiv" class="loading" style="display: none;">
-                    Analyzing food with OpenAI GPT-4-Nano...
+                <div id="progressContainer" class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <div class="progress-text">Analyzing with AI (GPT-4)...</div>
                 </div>
 
                 <div id="resultDiv"></div>
@@ -492,7 +533,7 @@
                 return;
             }
 
-            document.getElementById('loadingDiv').style.display = 'block';
+            document.getElementById('progressContainer').classList.add('active');
             document.getElementById('resultDiv').innerHTML = '';
 
             try {
@@ -523,7 +564,7 @@
                     </div>
                 `;
             } finally {
-                document.getElementById('loadingDiv').style.display = 'none';
+                document.getElementById('progressContainer').classList.remove('active');
             }
         }
 
@@ -644,49 +685,7 @@
                 `;
             }
 
-            // Display individual assessments if available
-            if (data.assessment && data.assessment.individual_assessments && data.assessment.individual_assessments.length > 0) {
-                html += `
-                    <div class="individual-assessments">
-                        <h3>Individual AI Perspectives (3-Prompt Analysis)</h3>
-                        <p style="font-size: 0.9em; color: #666; margin-bottom: 15px;">These 3 independent assessments are synthesized into the final recommendation above.</p>
-                `;
-
-                data.assessment.individual_assessments.forEach((indiv, idx) => {
-                    const indivRating = indiv.llm_assessment_rating;
-                    html += `
-                        <div class="assessment-result rating-${indivRating}" style="margin-bottom: 15px;">
-                            <div class="assessment-label">Perspective ${idx + 1}: ${indiv.perspective_focus}</div>
-                            <div class="rating-badge rating-${indivRating}">
-                                Rating ${indivRating}
-                            </div>
-
-                            <div class="comparison-item">
-                                <div class="comparison-item-label">Reaction Probability:</div>
-                                <div class="comparison-item-value">
-                                    ${indiv.reaction_probability_percentage}% (${indiv.reaction_probability})
-                                </div>
-                            </div>
-
-                            <div class="comparison-item">
-                                <div class="comparison-item-label">Confidence:</div>
-                                <div class="comparison-item-value">${indiv.confidence_percentage}%</div>
-                            </div>
-
-                            ${indiv.key_concerns && indiv.key_concerns.length > 0 ? `
-                                <div class="comparison-section">
-                                    <div class="comparison-label">Key Concerns:</div>
-                                    <ul style="margin-left: 20px;">
-                                        ${indiv.key_concerns.map(c => `<li>${c}</li>`).join('')}
-                                    </ul>
-                                </div>
-                            ` : ''}
-                        </div>
-                    `;
-                });
-
-                html += '</div>';
-            }
+            // Individual assessments are synthesized and not displayed (backend processing only)
 
             // Similar foods
             if (data.similar_foods && data.similar_foods.length > 0) {
