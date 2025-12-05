@@ -173,12 +173,18 @@ def assess_food_single_prompt(food_name, database_info, perspective="general"):
     except Exception as e:
         return {"error": f"OpenAI API error: {str(e)}", "food_name": food_name}
 
-def synthesize_assessments(food_name, database_info, assessments):
+def synthesize_assessments(food_name, database_info, assessments, sighi_rating=None, retry_count=0):
     """
     Use a 4th AI call to synthesize 3 assessments into one master response
-    Ensures SIGHI alignment
+    Ensures SIGHI alignment by re-running if needed
     """
     assessments_str = json.dumps(assessments, indent=2)
+
+    # Adjust prompt based on retry count
+    if retry_count == 0:
+        alignment_instruction = "CRITICAL: If this food exists in SIGHI, the final_rating MUST match sighi_rating."
+    else:
+        alignment_instruction = f"CRITICAL REQUIREMENT: This food exists in SIGHI with rating {sighi_rating}. Your final_rating MUST be exactly {sighi_rating}. No exceptions. If you previously assigned a different rating, you were incorrect."
 
     synthesis_prompt = f"""You are an expert synthesizer of MCAS food assessments. You have received 3 independent
 expert assessments of the food: "{food_name}"
@@ -218,7 +224,7 @@ Return ONLY a single JSON object in this format:
   "sighi_alignment_verified": true/false
 }}
 
-CRITICAL: If this food exists in SIGHI, the final_rating MUST match sighi_rating.
+{alignment_instruction}
 Never allow AI assessment to override SIGHI database ratings."""
 
     try:
@@ -246,6 +252,7 @@ def assess_food_with_llm(food_name, database_info, existing_food_data=None):
     """
     Use 3 simultaneous AI assessments + 1 synthesizer
     Ensures high quality, consistent, SIGHI-aligned assessments
+    Re-runs synthesis if AI disagrees with SIGHI
     """
 
     # Execute 3 assessments in parallel
@@ -263,17 +270,64 @@ def assess_food_with_llm(food_name, database_info, existing_food_data=None):
             assessments.append(assessment)
 
     # Synthesize the 3 assessments into 1 master response
-    synthesized = synthesize_assessments(food_name, database_info, assessments)
+    # Retry if disagreement with SIGHI
+    max_retries = 2
+    retry_count = 0
+    synthesized = None
 
-    # SIGHI validation: if food exists in database, enforce alignment
-    if existing_food_data:
-        sighi_rating = existing_food_data.get('rating')
-        synthesized['found_in_sighi'] = True
-        synthesized['sighi_rating'] = sighi_rating
-        # Override final rating to match SIGHI
-        synthesized['final_rating'] = sighi_rating
-        synthesized['sighi_alignment_verified'] = True
-        synthesized['sighi_enforcement_note'] = "Rating enforced to match SIGHI database (ground truth)"
+    while retry_count <= max_retries:
+        synthesized = synthesize_assessments(
+            food_name,
+            database_info,
+            assessments,
+            sighi_rating=existing_food_data.get('rating') if existing_food_data else None,
+            retry_count=retry_count
+        )
+
+        # Check for errors in synthesis
+        if "error" in synthesized:
+            logger.warning(f"Synthesis error for {food_name}: {synthesized.get('error')}")
+            break
+
+        # SIGHI validation: check alignment
+        if existing_food_data:
+            sighi_rating = existing_food_data.get('rating')
+            ai_rating = synthesized.get('final_rating')
+
+            synthesized['found_in_sighi'] = True
+            synthesized['sighi_rating'] = sighi_rating
+
+            if ai_rating == sighi_rating:
+                # Alignment verified!
+                synthesized['sighi_alignment_verified'] = True
+                synthesized['alignment_note'] = "AI assessment aligns with SIGHI database"
+                logger.info(f"SIGHI alignment verified for {food_name}: rating {ai_rating}")
+                break
+            else:
+                # Disagreement detected
+                if retry_count < max_retries:
+                    logger.warning(
+                        f"SIGHI alignment failed for {food_name}: "
+                        f"AI rated {ai_rating} but SIGHI rated {sighi_rating}. "
+                        f"Retrying synthesis (attempt {retry_count + 1}/{max_retries})"
+                    )
+                    retry_count += 1
+                else:
+                    # Max retries reached, use SIGHI rating
+                    logger.warning(
+                        f"Max retries reached for {food_name}. "
+                        f"Using SIGHI rating {sighi_rating} instead of AI rating {ai_rating}"
+                    )
+                    synthesized['sighi_alignment_verified'] = False
+                    synthesized['alignment_note'] = (
+                        f"AI initially rated {ai_rating} but SIGHI database rates {sighi_rating}. "
+                        "Using SIGHI rating as ground truth."
+                    )
+                    synthesized['final_rating'] = sighi_rating
+                    break
+        else:
+            # No SIGHI data, assessment is complete
+            break
 
     return {
         "individual_assessments": assessments,
