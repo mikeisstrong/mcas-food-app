@@ -645,8 +645,49 @@
                 `;
             }
 
-            // Individual assessments are synthesized into the final assessment above
-            // (3-prompt synthesis happens in the backend for accuracy)
+            // Display individual assessments if available
+            if (data.assessment && data.assessment.individual_assessments && data.assessment.individual_assessments.length > 0) {
+                html += `
+                    <div class="individual-assessments">
+                        <h3>Individual AI Perspectives (3-Prompt Analysis)</h3>
+                        <p style="font-size: 0.9em; color: #666; margin-bottom: 15px;">These 3 independent assessments are synthesized into the final recommendation above.</p>
+                `;
+
+                data.assessment.individual_assessments.forEach((indiv, idx) => {
+                    const indivRating = indiv.llm_assessment_rating;
+                    html += `
+                        <div class="assessment-result rating-${indivRating}" style="margin-bottom: 15px;">
+                            <div class="assessment-label">Perspective ${idx + 1}: ${indiv.perspective_focus}</div>
+                            <div class="rating-badge rating-${indivRating}">
+                                Rating ${indivRating}
+                            </div>
+
+                            <div class="comparison-item">
+                                <div class="comparison-item-label">Reaction Probability:</div>
+                                <div class="comparison-item-value">
+                                    ${indiv.reaction_probability_percentage}% (${indiv.reaction_probability})
+                                </div>
+                            </div>
+
+                            <div class="comparison-item">
+                                <div class="comparison-item-label">Confidence:</div>
+                                <div class="comparison-item-value">${indiv.confidence_percentage}%</div>
+                            </div>
+
+                            ${indiv.key_concerns && indiv.key_concerns.length > 0 ? `
+                                <div class="comparison-section">
+                                    <div class="comparison-label">Key Concerns:</div>
+                                    <ul style="margin-left: 20px;">
+                                        ${indiv.key_concerns.map(c => `<li>${c}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+            }
 
             // Similar foods
             if (data.similar_foods && data.similar_foods.length > 0) {
