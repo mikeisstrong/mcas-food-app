@@ -1,6 +1,6 @@
 """
 MCAS Food Assessment API with LLM Integration
-Uses OpenAI GPT-4-Turbo to assess foods based on SIGHI database and scientific principles
+Uses OpenAI GPT-5-Mini to assess foods based on SIGHI database and scientific principles
 """
 
 from flask import Flask, request, jsonify
@@ -34,18 +34,19 @@ CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPT
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-# Helper function to handle both max_tokens and max_completion_tokens
+# Helper function to handle gpt-5-mini API compatibility
 def create_completion(model, messages, max_tokens):
-    """Create a completion with compatibility for both parameter formats"""
+    """Create a completion with gpt-5-mini parameter handling"""
     try:
-        # Try with max_completion_tokens first (gpt-5 models)
+        # gpt-5-mini requires max_completion_tokens (not max_tokens)
         return client.chat.completions.create(
             model=model,
             max_completion_tokens=max_tokens,
             messages=messages
         )
-    except TypeError:
-        # Fall back to max_tokens for older SDK versions or models
+    except (TypeError, AttributeError) as e:
+        # If max_completion_tokens fails, try max_tokens as fallback
+        logger.warning(f"max_completion_tokens failed ({e}), falling back to max_tokens")
         return client.chat.completions.create(
             model=model,
             max_tokens=max_tokens,
@@ -157,7 +158,7 @@ def assess_food_single_prompt(food_name, database_info, perspective="general"):
 
     try:
         response = create_completion(
-            model="gpt-4-turbo",
+            model="gpt-5-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1000
         )
@@ -234,7 +235,7 @@ RESPOND WITH ONLY THIS JSON:
 
     try:
         response = create_completion(
-            model="gpt-4-turbo",
+            model="gpt-5-mini",
             messages=[{"role": "user", "content": synthesis_prompt}],
             max_tokens=1200
         )
