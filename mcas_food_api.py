@@ -93,58 +93,40 @@ def generate_assessment_prompt(food_name, database_info, perspective="general"):
     Generate one of three different assessment prompt perspectives
     perspective: "general", "histamine_risk", or "mechanism_analysis"
     """
-    base_context = f"""You are an expert in Mast Cell Activation Syndrome (MCAS) and histamine intolerance,
-based on the SIGHI (Swiss Interest Group Histamine Intolerance) food compatibility framework.
+    base_context = f"""MCAS/HIT Expert Assessment - {food_name}
 
-Here is the SIGHI database information for reference:
-{database_info}
-
-Food Assessment Task:
-Assess the food: "{food_name}" """
+SIGHI Reference: {database_info}"""
 
     if perspective == "general":
-        specific_prompt = """Provide a comprehensive assessment considering all factors:
-- Whether the food exists in SIGHI and its rating
-- Histamine content
-- Biogenic amine content
-- Mechanisms of concern
-- Preparation-dependent risks"""
+        specific_prompt = """Assess across: SIGHI match, histamine/amines, mechanisms (H/A/L/B), preparation risks."""
 
     elif perspective == "histamine_risk":
-        specific_prompt = """Focus specifically on HISTAMINE CONTENT AND FRESHNESS:
-- What is the baseline histamine level in this food?
-- How does freshness affect histamine accumulation?
-- What preparation methods minimize histamine?
-- Age, fermentation, and storage time impacts"""
+        specific_prompt = """Focus: baseline histamine, freshness impact, storage effects, safe prep methods."""
 
     elif perspective == "mechanism_analysis":
-        specific_prompt = """Focus on specific MECHANISMS affecting MCAS:
-- Which mechanisms apply? (H = histamine, A = amines, L = liberators, B = DAO blockers)
-- How severely does each mechanism affect MCAS patients?
-- What are cross-reaction risks?
-- What is the biological basis for concern?"""
+        specific_prompt = """Focus: Which mechanisms? (H=histamine, A=amines, L=liberators, B=DAO blockers). Severity?"""
 
     prompt = base_context + "\n" + specific_prompt + """
 
-Provide your assessment in this JSON format:
+JSON:
 {
   "food_name": "%s",
-  "found_in_sighi": true/false,
+  "found_in_sighi": boolean,
   "sighi_rating": 0-3 or null,
   "llm_assessment_rating": 0-3,
   "confidence_percentage": 70-95,
   "reaction_probability": "low/moderate/high/very-high",
   "reaction_probability_percentage": 0-100,
-  "mechanisms": ["H", "A", "L", "B"] (which apply),
-  "key_concerns": ["concern1", "concern2"],
-  "preparation_notes": "tips for preparing this food safely",
-  "freshness_dependent": true/false,
-  "scientific_explanation": "2-3 sentences explaining the assessment",
-  "recommendations": "practical advice for MCAS sufferers",
+  "mechanisms": ["H", "A", "L", "B"],
+  "key_concerns": ["short", "list"],
+  "preparation_notes": "one sentence",
+  "freshness_dependent": boolean,
+  "scientific_explanation": "one sentence max",
+  "recommendations": "practical advice",
   "perspective_focus": "%s"
 }
 
-Be conservative in your assessment. When in doubt, rate higher (worse), not lower.""" % (food_name, perspective)
+Conservative rating: when unsure, rate higher (worse).""" % (food_name, perspective)
 
     return prompt
 
@@ -185,54 +167,39 @@ def synthesize_assessments(food_name, database_info, assessments, sighi_rating=N
     # Adjust prompt based on retry count and match type
     if retry_count == 0:
         if is_exact_match:
-            alignment_instruction = "CRITICAL: If this food exists in SIGHI, the final_rating MUST match sighi_rating."
+            alignment_instruction = "CRITICAL: final_rating MUST match sighi_rating."
         elif sighi_rating is not None:
-            alignment_instruction = f"IMPORTANT: A similar SIGHI food has rating {sighi_rating}. Use this as guidance, and your final_rating should be the same or higher (more cautious)."
+            alignment_instruction = f"IMPORTANT: Similar SIGHI food rated {sighi_rating}. Use as guidance."
         else:
-            alignment_instruction = "Provide your best assessment based on the 3 expert perspectives."
+            alignment_instruction = "Provide best consensus from 3 assessments."
     else:
-        alignment_instruction = f"CRITICAL REQUIREMENT: This food exists in SIGHI with rating {sighi_rating}. Your final_rating MUST be exactly {sighi_rating}. No exceptions. If you previously assigned a different rating, you were incorrect."
+        alignment_instruction = f"CRITICAL: final_rating MUST be exactly {sighi_rating}. No exceptions."
 
-    synthesis_prompt = f"""You are an expert synthesizer of MCAS food assessments. You have received 3 independent
-expert assessments of the food: "{food_name}"
+    synthesis_prompt = f"""Synthesize 3 MCAS assessments for: {food_name}
 
-SIGHI Database Context:
-{database_info}
-
-Here are the 3 independent assessments to synthesize:
-
+3 Expert Assessments:
 {assessments_str}
 
-Your task:
-1. Evaluate all 3 assessments for consistency and quality
-2. Identify areas of agreement and disagreement
-3. Create ONE master assessment that:
-   - Represents the consensus view
-   - Is conservative (errs on the side of caution for MCAS)
-   - Provides the most complete and accurate assessment
-   - MUST ALIGN with SIGHI database ratings if the food exists there
+Task: Merge into ONE consensus rating. Conservative (when unsure, rate worse). {alignment_instruction}
 
-Return ONLY a single JSON object in this format:
+JSON:
 {{
   "food_name": "{food_name}",
-  "found_in_sighi": true/false,
+  "found_in_sighi": boolean,
   "sighi_rating": 0-3 or null,
   "final_rating": 0-3,
   "confidence_percentage": 70-95,
   "reaction_probability": "low/moderate/high/very-high",
   "reaction_probability_percentage": 0-100,
-  "mechanisms": ["H", "A", "L", "B"] (which apply),
-  "key_concerns": ["concern1", "concern2"],
-  "preparation_notes": "tips for preparing this food safely",
-  "freshness_dependent": true/false,
-  "scientific_explanation": "2-3 sentences explaining the assessment",
-  "recommendations": "practical advice for MCAS sufferers",
-  "synthesis_notes": "explanation of how the 3 assessments were synthesized",
-  "sighi_alignment_verified": true/false
-}}
-
-{alignment_instruction}
-Never allow AI assessment to override SIGHI database ratings."""
+  "mechanisms": ["H", "A", "L", "B"],
+  "key_concerns": ["short", "list"],
+  "preparation_notes": "one sentence",
+  "freshness_dependent": boolean,
+  "scientific_explanation": "one sentence",
+  "recommendations": "practical advice",
+  "synthesis_notes": "brief explanation",
+  "sighi_alignment_verified": boolean
+}}"""
 
     try:
         response = client.chat.completions.create(
