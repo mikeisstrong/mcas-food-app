@@ -12,6 +12,8 @@ from openai import OpenAI
 import difflib
 import logging
 import sys
+import concurrent.futures
+import threading
 
 # Setup logging
 logging.basicConfig(
@@ -86,58 +88,47 @@ def build_food_context():
 
     return context
 
-def assess_food_with_llm(food_name, database_info, existing_food_data=None):
+def generate_assessment_prompt(food_name, database_info, perspective="general"):
     """
-    Use OpenAI to assess a food for MCAS compatibility
-    References SIGHI database and scientific principles
+    Generate one of three different assessment prompt perspectives
+    perspective: "general", "histamine_risk", or "mechanism_analysis"
     """
-
-    # Build the prompt
-    prompt = f"""You are an expert in Mast Cell Activation Syndrome (MCAS) and histamine intolerance,
+    base_context = f"""You are an expert in Mast Cell Activation Syndrome (MCAS) and histamine intolerance,
 based on the SIGHI (Swiss Interest Group Histamine Intolerance) food compatibility framework.
 
 Here is the SIGHI database information for reference:
 {database_info}
 
 Food Assessment Task:
-Assess the food: "{food_name}"
+Assess the food: "{food_name}" """
 
-If this food exists in the SIGHI database, use that rating as the primary source.
-If it doesn't exist or is a brand/prepared food, assess based on these principles:
+    if perspective == "general":
+        specific_prompt = """Provide a comprehensive assessment considering all factors:
+- Whether the food exists in SIGHI and its rating
+- Histamine content
+- Biogenic amine content
+- Mechanisms of concern
+- Preparation-dependent risks"""
 
-1. HISTAMINE CONTENT:
-   - Fresh, perishable proteins: Very high risk (especially aged/cured/fermented)
-   - Fresh produce: Generally low histamine
-   - Fermented foods: High histamine
-   - Cured/smoked meats: Very high histamine
+    elif perspective == "histamine_risk":
+        specific_prompt = """Focus specifically on HISTAMINE CONTENT AND FRESHNESS:
+- What is the baseline histamine level in this food?
+- How does freshness affect histamine accumulation?
+- What preparation methods minimize histamine?
+- Age, fermentation, and storage time impacts"""
 
-2. BIOGENIC AMINES (A):
-   - Citrus fruits, bananas, nuts: contain tyramine, phenylethylamine
-   - Chocolate: contains phenylethylamine
-   - Aged foods: accumulate amines
+    elif perspective == "mechanism_analysis":
+        specific_prompt = """Focus on specific MECHANISMS affecting MCAS:
+- Which mechanisms apply? (H = histamine, A = amines, L = liberators, B = DAO blockers)
+- How severely does each mechanism affect MCAS patients?
+- What are cross-reaction risks?
+- What is the biological basis for concern?"""
 
-3. HISTAMINE LIBERATORS (L):
-   - Tomatoes, strawberries, raspberries, spinach
-   - Seafood (especially shellfish)
-   - Chocolate, cocoa
-   - Citrus fruits
-   - Nuts (especially walnuts, cashews)
-   - Spices (cumin, mustard, curry)
-
-4. DAO BLOCKERS/INHIBITORS (B):
-   - Alcohol
-   - Black tea, green tea
-   - Fermented foods
-   - Iodine supplements
-
-5. FRESHNESS DEPENDENCY:
-   - Fresh = much lower histamine
-   - Stored = higher histamine accumulation
-   - Aged/Fermented = very high histamine
+    prompt = base_context + "\n" + specific_prompt + """
 
 Provide your assessment in this JSON format:
-{{
-  "food_name": "{food_name}",
+{
+  "food_name": "%s",
   "found_in_sighi": true/false,
   "sighi_rating": 0-3 or null,
   "llm_assessment_rating": 0-3,
@@ -149,60 +140,162 @@ Provide your assessment in this JSON format:
   "preparation_notes": "tips for preparing this food safely",
   "freshness_dependent": true/false,
   "scientific_explanation": "2-3 sentences explaining the assessment",
-  "recommendations": "practical advice for MCAS sufferers"
-}}
+  "recommendations": "practical advice for MCAS sufferers",
+  "perspective_focus": "%s"
+}
 
-Be conservative in your assessment. When in doubt, rate higher (worse), not lower."""
+Be conservative in your assessment. When in doubt, rate higher (worse), not lower.""" % (food_name, perspective)
+
+    return prompt
+
+def assess_food_single_prompt(food_name, database_info, perspective="general"):
+    """Execute a single assessment prompt and return parsed JSON"""
+    prompt = generate_assessment_prompt(food_name, database_info, perspective)
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             max_tokens=1000,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
 
-        # Parse the response
         response_text = response.choices[0].message.content
 
         # Extract JSON from response
-        try:
-            # Find JSON in response
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
+        json_start = response_text.find('{')
+        json_end = response_text.rfind('}') + 1
+        if json_start >= 0 and json_end > json_start:
             json_str = response_text[json_start:json_end]
-            assessment = json.loads(json_str)
-        except:
-            assessment = {"error": "Could not parse LLM response", "raw_response": response_text}
-
-        return assessment
+            return json.loads(json_str)
+        else:
+            return {"error": "No JSON found in response", "raw_response": response_text}
 
     except Exception as e:
-        return {
-            "error": f"OpenAI API error: {str(e)}",
-            "food_name": food_name
+        return {"error": f"OpenAI API error: {str(e)}", "food_name": food_name}
+
+def synthesize_assessments(food_name, database_info, assessments):
+    """
+    Use a 4th AI call to synthesize 3 assessments into one master response
+    Ensures SIGHI alignment
+    """
+    assessments_str = json.dumps(assessments, indent=2)
+
+    synthesis_prompt = f"""You are an expert synthesizer of MCAS food assessments. You have received 3 independent
+expert assessments of the food: "{food_name}"
+
+SIGHI Database Context:
+{database_info}
+
+Here are the 3 independent assessments to synthesize:
+
+{assessments_str}
+
+Your task:
+1. Evaluate all 3 assessments for consistency and quality
+2. Identify areas of agreement and disagreement
+3. Create ONE master assessment that:
+   - Represents the consensus view
+   - Is conservative (errs on the side of caution for MCAS)
+   - Provides the most complete and accurate assessment
+   - MUST ALIGN with SIGHI database ratings if the food exists there
+
+Return ONLY a single JSON object in this format:
+{{
+  "food_name": "{food_name}",
+  "found_in_sighi": true/false,
+  "sighi_rating": 0-3 or null,
+  "final_rating": 0-3,
+  "confidence_percentage": 70-95,
+  "reaction_probability": "low/moderate/high/very-high",
+  "reaction_probability_percentage": 0-100,
+  "mechanisms": ["H", "A", "L", "B"] (which apply),
+  "key_concerns": ["concern1", "concern2"],
+  "preparation_notes": "tips for preparing this food safely",
+  "freshness_dependent": true/false,
+  "scientific_explanation": "2-3 sentences explaining the assessment",
+  "recommendations": "practical advice for MCAS sufferers",
+  "synthesis_notes": "explanation of how the 3 assessments were synthesized",
+  "sighi_alignment_verified": true/false
+}}
+
+CRITICAL: If this food exists in SIGHI, the final_rating MUST match sighi_rating.
+Never allow AI assessment to override SIGHI database ratings."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            max_tokens=1200,
+            messages=[{"role": "user", "content": synthesis_prompt}]
+        )
+
+        response_text = response.choices[0].message.content
+
+        # Extract JSON from response
+        json_start = response_text.find('{')
+        json_end = response_text.rfind('}') + 1
+        if json_start >= 0 and json_end > json_start:
+            json_str = response_text[json_start:json_end]
+            return json.loads(json_str)
+        else:
+            return {"error": "No JSON found in synthesis response", "raw_response": response_text}
+
+    except Exception as e:
+        return {"error": f"Synthesis error: {str(e)}", "food_name": food_name}
+
+def assess_food_with_llm(food_name, database_info, existing_food_data=None):
+    """
+    Use 3 simultaneous AI assessments + 1 synthesizer
+    Ensures high quality, consistent, SIGHI-aligned assessments
+    """
+
+    # Execute 3 assessments in parallel
+    perspectives = ["general", "histamine_risk", "mechanism_analysis"]
+    assessments = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            executor.submit(assess_food_single_prompt, food_name, database_info, p): p
+            for p in perspectives
         }
+
+        for future in concurrent.futures.as_completed(futures):
+            assessment = future.result()
+            assessments.append(assessment)
+
+    # Synthesize the 3 assessments into 1 master response
+    synthesized = synthesize_assessments(food_name, database_info, assessments)
+
+    # SIGHI validation: if food exists in database, enforce alignment
+    if existing_food_data:
+        sighi_rating = existing_food_data.get('rating')
+        synthesized['found_in_sighi'] = True
+        synthesized['sighi_rating'] = sighi_rating
+        # Override final rating to match SIGHI
+        synthesized['final_rating'] = sighi_rating
+        synthesized['sighi_alignment_verified'] = True
+        synthesized['sighi_enforcement_note'] = "Rating enforced to match SIGHI database (ground truth)"
+
+    return {
+        "individual_assessments": assessments,
+        "synthesized_assessment": synthesized
+    }
 
 @app.route('/api/assess-food', methods=['POST', 'OPTIONS'])
 def assess_food():
     """Main API endpoint for food assessment"""
     logger.info(f"Request received: {request.method} {request.path}")
-    logger.info(f"Headers: {dict(request.headers)}")
 
     if request.method == 'OPTIONS':
-        logger.info("Handling OPTIONS request for CORS preflight")
         return '', 204
 
     data = request.json
-    logger.info(f"Request data: {data}")
     food_name = data.get('food_name', '').strip()
 
     if not food_name:
         logger.error("food_name is required")
         return jsonify({"error": "food_name is required"}), 400
 
-    logger.info(f"Assessing food: {food_name}")
+    logger.info(f"Assessing food: {food_name} - Starting 3-prompt synthesis process")
 
     # Check if food exists in SIGHI database
     exact_match = get_food_by_name(food_name)
@@ -215,12 +308,12 @@ def assess_food():
         "similar_foods": similar_foods
     }
 
-    # Get LLM assessment
+    # Get LLM assessment with 3-prompt synthesis + SIGHI validation
     database_info = build_food_context()
     llm_assessment = assess_food_with_llm(food_name, database_info, exact_match)
-    response["llm_assessment"] = llm_assessment
+    response["assessment"] = llm_assessment
 
-    # Combine with database data if exact match exists
+    # Include database rating if exact match exists
     if exact_match:
         response["database_rating"] = {
             "rating": exact_match['rating'],
@@ -229,7 +322,7 @@ def assess_food():
             "remarks": exact_match['remarks']
         }
 
-    logger.info(f"Assessment complete for {food_name}, returning response")
+    logger.info(f"Assessment complete for {food_name}")
     return jsonify(response)
 
 @app.route('/api/search-foods', methods=['GET'])
