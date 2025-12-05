@@ -179,7 +179,7 @@ def synthesize_assessments(food_name, database_info, assessments, sighi_rating=N
     else:
         alignment_instruction = f"CRITICAL REQUIREMENT: final_rating MUST be exactly {sighi_rating}. The previous synthesis was incorrect. This is a retry - enforce SIGHI alignment."
 
-    synthesis_prompt = f"""You are an expert synthesizer of MCAS food assessments. Merge 3 independent expert assessments into ONE authoritative consensus.
+    synthesis_prompt = f"""You are an expert synthesizer of MCAS food assessments. Merge 3 independent expert assessments into ONE authoritative consensus with comprehensive practical guidance.
 
 FOOD: {food_name}
 
@@ -196,6 +196,9 @@ SYNTHESIS INSTRUCTIONS:
 4. {alignment_instruction}
 5. Compile ALL mechanisms mentioned across the 3 assessments into your mechanisms field
 6. Select the 3 most important key concerns synthesized from all perspectives
+7. Provide comprehensive guidance across multiple scenarios and use cases
+8. Include specific preparation, storage, and serving recommendations
+9. Explain what makes this food risky/safe in clear language for MCAS patients
 
 RESPOND WITH ONLY THIS JSON (no explanation text):
 {{
@@ -208,18 +211,24 @@ RESPOND WITH ONLY THIS JSON (no explanation text):
   "reaction_probability_percentage": 0-100,
   "mechanisms": ["H", "A", "L", "B"],
   "key_concerns": ["concern1", "concern2", "concern3"],
-  "preparation_notes": "single sentence advice",
+  "scientific_explanation": "detailed 2-3 sentence explanation of the rating and why this food is at this risk level",
+  "histamine_profile": "detailed description of this food's histamine characteristics: fresh state vs aged/stored, fermentation status, typical preparation methods, how storage time affects histamine content",
+  "mechanism_details": "explain each applicable mechanism (H/A/L/B) - which ones are present, how severe they are, and which are most problematic for MCAS patients",
+  "preparation_guidance": "detailed recommendations for making this food as safe as possible - cooking methods, storage, timing, combinations to avoid, how to prepare if attempting to tolerate it",
   "freshness_dependent": boolean,
-  "scientific_explanation": "one sentence explaining the rating",
-  "recommendations": "one sentence practical advice for MCAS patients",
-  "synthesis_notes": "how the 3 perspectives were merged into this consensus",
+  "freshness_guidance": "if freshness matters, explain exactly how: how long fresh is safe, what storage temperature is needed, what signs indicate spoilage/high histamine, when to discard",
+  "safe_scenarios": "specific situations when/if it might be tolerable: only fresh, only cooked a certain way, only in small quantities, not recommended for anyone, etc.",
+  "warning_signs": "what symptoms should alert MCAS patient that they're reacting to this food, when to seek help",
+  "synthesis_notes": "how the 3 perspectives were merged into this consensus - were they in agreement, which perspective was most informative, any important nuances",
+  "recommendations": "comprehensive practical advice - is this food recommended to avoid completely, try in specific ways, or potentially tolerable for some MCAS patients",
+  "dietary_alternatives": "foods that are safer alternatives to suggest instead",
   "sighi_alignment_verified": boolean
 }}"""
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            max_tokens=1200,
+            max_tokens=2000,
             messages=[{"role": "user", "content": synthesis_prompt}]
         )
 

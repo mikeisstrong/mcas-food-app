@@ -655,23 +655,79 @@
                             <div class="assessment-value">${assessment.scientific_explanation}</div>
                         </div>
 
-                        ${assessment.preparation_notes ? `
+                        ${assessment.histamine_profile ? `
                             <div class="comparison-section">
-                                <div class="comparison-label">Preparation Tips:</div>
-                                <div class="assessment-value">${assessment.preparation_notes}</div>
+                                <div class="comparison-label">Histamine Profile:</div>
+                                <div class="assessment-value">${assessment.histamine_profile}</div>
                             </div>
                         ` : ''}
 
-                        ${assessment.recommendations ? `
+                        ${assessment.mechanism_details ? `
                             <div class="comparison-section">
-                                <div class="comparison-label">Recommendations:</div>
-                                <div class="assessment-value">${assessment.recommendations}</div>
+                                <div class="comparison-label">Mechanism Details:</div>
+                                <div class="assessment-value">${assessment.mechanism_details}</div>
+                            </div>
+                        ` : ''}
+
+                        ${assessment.preparation_guidance ? `
+                            <div class="comparison-section">
+                                <div class="comparison-label">Preparation Guidance:</div>
+                                <div class="assessment-value">${assessment.preparation_guidance}</div>
+                            </div>
+                        ` : ''}
+
+                        ${assessment.preparation_notes ? `
+                            <div class="comparison-section">
+                                <div class="comparison-label">Quick Preparation Tips:</div>
+                                <div class="assessment-value">${assessment.preparation_notes}</div>
                             </div>
                         ` : ''}
 
                         ${assessment.freshness_dependent ? `
                             <div class="info-box">
                                 ⚠️ Freshness is important for this food. Older/stored versions will have higher histamine content.
+                            </div>
+                        ` : ''}
+
+                        ${assessment.freshness_guidance ? `
+                            <div class="comparison-section">
+                                <div class="comparison-label">Freshness Guidelines:</div>
+                                <div class="assessment-value">${assessment.freshness_guidance}</div>
+                            </div>
+                        ` : ''}
+
+                        ${assessment.safe_scenarios ? `
+                            <div class="comparison-section">
+                                <div class="comparison-label">Safe Scenarios:</div>
+                                <div class="assessment-value">${assessment.safe_scenarios}</div>
+                            </div>
+                        ` : ''}
+
+                        ${assessment.warning_signs ? `
+                            <div class="comparison-section">
+                                <div class="comparison-label">Warning Signs:</div>
+                                <div class="assessment-value">${assessment.warning_signs}</div>
+                            </div>
+                        ` : ''}
+
+                        ${assessment.dietary_alternatives ? `
+                            <div class="comparison-section">
+                                <div class="comparison-label">Safer Alternatives:</div>
+                                <div class="assessment-value">${assessment.dietary_alternatives}</div>
+                            </div>
+                        ` : ''}
+
+                        ${assessment.recommendations ? `
+                            <div class="comparison-section">
+                                <div class="comparison-label">Overall Recommendations:</div>
+                                <div class="assessment-value">${assessment.recommendations}</div>
+                            </div>
+                        ` : ''}
+
+                        ${assessment.synthesis_notes ? `
+                            <div class="comparison-section">
+                                <div class="comparison-label">Assessment Synthesis:</div>
+                                <div class="assessment-value" style="font-size: 0.9em; color: #666;"><em>${assessment.synthesis_notes}</em></div>
                             </div>
                         ` : ''}
                     </div>
