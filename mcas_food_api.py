@@ -173,16 +173,23 @@ def assess_food_single_prompt(food_name, database_info, perspective="general"):
     except Exception as e:
         return {"error": f"OpenAI API error: {str(e)}", "food_name": food_name}
 
-def synthesize_assessments(food_name, database_info, assessments, sighi_rating=None, retry_count=0):
+def synthesize_assessments(food_name, database_info, assessments, sighi_rating=None, retry_count=0, is_exact_match=None):
     """
     Use a 4th AI call to synthesize 3 assessments into one master response
     Ensures SIGHI alignment by re-running if needed
+
+    is_exact_match: Boolean indicating if sighi_rating is from exact match or similar food
     """
     assessments_str = json.dumps(assessments, indent=2)
 
-    # Adjust prompt based on retry count
+    # Adjust prompt based on retry count and match type
     if retry_count == 0:
-        alignment_instruction = "CRITICAL: If this food exists in SIGHI, the final_rating MUST match sighi_rating."
+        if is_exact_match:
+            alignment_instruction = "CRITICAL: If this food exists in SIGHI, the final_rating MUST match sighi_rating."
+        elif sighi_rating is not None:
+            alignment_instruction = f"IMPORTANT: A similar SIGHI food has rating {sighi_rating}. Use this as guidance, and your final_rating should be the same or higher (more cautious)."
+        else:
+            alignment_instruction = "Provide your best assessment based on the 3 expert perspectives."
     else:
         alignment_instruction = f"CRITICAL REQUIREMENT: This food exists in SIGHI with rating {sighi_rating}. Your final_rating MUST be exactly {sighi_rating}. No exceptions. If you previously assigned a different rating, you were incorrect."
 
@@ -248,12 +255,18 @@ Never allow AI assessment to override SIGHI database ratings."""
     except Exception as e:
         return {"error": f"Synthesis error: {str(e)}", "food_name": food_name}
 
-def assess_food_with_llm(food_name, database_info, existing_food_data=None):
+def assess_food_with_llm(food_name, database_info, existing_food_data=None, is_exact_match=None):
     """
     Use 3 simultaneous AI assessments + 1 synthesizer
     Ensures high quality, consistent, SIGHI-aligned assessments
     Re-runs synthesis if AI disagrees with SIGHI
+
+    is_exact_match: Boolean indicating if existing_food_data is exact match or similar
     """
+
+    # Determine if this is an exact match or similar food
+    if is_exact_match is None and existing_food_data:
+        is_exact_match = (existing_food_data.get('name', '').lower() == food_name.lower())
 
     # Execute 3 assessments in parallel
     perspectives = ["general", "histamine_risk", "mechanism_analysis"]
@@ -281,7 +294,8 @@ def assess_food_with_llm(food_name, database_info, existing_food_data=None):
             database_info,
             assessments,
             sighi_rating=existing_food_data.get('rating') if existing_food_data else None,
-            retry_count=retry_count
+            retry_count=retry_count,
+            is_exact_match=is_exact_match
         )
 
         # Check for errors in synthesis
@@ -294,13 +308,17 @@ def assess_food_with_llm(food_name, database_info, existing_food_data=None):
             sighi_rating = existing_food_data.get('rating')
             ai_rating = synthesized.get('final_rating')
 
-            synthesized['found_in_sighi'] = True
+            synthesized['found_in_sighi'] = is_exact_match if is_exact_match is not None else True
+            synthesized['sighi_reference'] = existing_food_data.get('name', food_name)
             synthesized['sighi_rating'] = sighi_rating
 
             if ai_rating == sighi_rating:
                 # Alignment verified!
                 synthesized['sighi_alignment_verified'] = True
-                synthesized['alignment_note'] = "AI assessment aligns with SIGHI database"
+                if is_exact_match:
+                    synthesized['alignment_note'] = "AI assessment aligns with SIGHI database (exact match)"
+                else:
+                    synthesized['alignment_note'] = f"AI assessment aligns with similar SIGHI food: {existing_food_data.get('name')}"
                 logger.info(f"SIGHI alignment verified for {food_name}: rating {ai_rating}")
                 break
             else:
@@ -319,8 +337,9 @@ def assess_food_with_llm(food_name, database_info, existing_food_data=None):
                         f"Using SIGHI rating {sighi_rating} instead of AI rating {ai_rating}"
                     )
                     synthesized['sighi_alignment_verified'] = False
+                    ref_food = existing_food_data.get('name', 'database')
                     synthesized['alignment_note'] = (
-                        f"AI initially rated {ai_rating} but SIGHI database rates {sighi_rating}. "
+                        f"AI initially rated {ai_rating} but SIGHI database rates {ref_food} as {sighi_rating}. "
                         "Using SIGHI rating as ground truth."
                     )
                     synthesized['final_rating'] = sighi_rating
@@ -363,8 +382,10 @@ def assess_food():
     }
 
     # Get LLM assessment with 3-prompt synthesis + SIGHI validation
+    # Use exact match if available, otherwise use first similar food for guidance
+    sighi_reference = exact_match or (similar_foods[0] if similar_foods else None)
     database_info = build_food_context()
-    llm_assessment = assess_food_with_llm(food_name, database_info, exact_match)
+    llm_assessment = assess_food_with_llm(food_name, database_info, sighi_reference)
     response["assessment"] = llm_assessment
 
     # Include database rating if exact match exists
