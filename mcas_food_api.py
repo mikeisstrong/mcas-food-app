@@ -179,28 +179,20 @@ def synthesize_assessments(food_name, database_info, assessments, sighi_rating=N
     else:
         alignment_instruction = f"CRITICAL REQUIREMENT: final_rating MUST be exactly {sighi_rating}. The previous synthesis was incorrect. This is a retry - enforce SIGHI alignment."
 
-    synthesis_prompt = f"""You are an expert synthesizer of MCAS food assessments. Merge 3 independent expert assessments into ONE authoritative consensus with comprehensive practical guidance.
+    synthesis_prompt = f"""Synthesize 3 expert MCAS food assessments into ONE consensus rating with practical guidance.
 
 FOOD: {food_name}
 
-SIGHI DATABASE CONTEXT:
-{database_info}
-
-3 EXPERT ASSESSMENTS (General, Histamine-Risk, Mechanism-focused perspectives):
+3 EXPERT ASSESSMENTS (General, Histamine-Risk, Mechanism-focused):
 {assessments_str}
 
-SYNTHESIS INSTRUCTIONS:
-1. Analyze agreement/disagreement across all 3 perspectives
-2. Identify which perspective(s) provide the most reliable information for this specific food type
-3. Create ONE consensus rating that is CONSERVATIVE - when evidence conflicts or is unclear, rate higher (worse) for patient safety
-4. {alignment_instruction}
-5. Compile ALL mechanisms mentioned across the 3 assessments into your mechanisms field
-6. Select the 3 most important key concerns synthesized from all perspectives
-7. Provide comprehensive guidance across multiple scenarios and use cases
-8. Include specific preparation, storage, and serving recommendations
-9. Explain what makes this food risky/safe in clear language for MCAS patients
+SYNTHESIS TASK:
+1. Merge perspectives into one conservative consensus rating
+2. {alignment_instruction}
+3. Compile all mechanisms from 3 assessments
+4. Select 3 key concerns
 
-RESPOND WITH ONLY THIS JSON (no explanation text):
+RESPOND WITH ONLY THIS JSON:
 {{
   "food_name": "{food_name}",
   "found_in_sighi": boolean,
@@ -211,24 +203,22 @@ RESPOND WITH ONLY THIS JSON (no explanation text):
   "reaction_probability_percentage": 0-100,
   "mechanisms": ["H", "A", "L", "B"],
   "key_concerns": ["concern1", "concern2", "concern3"],
-  "scientific_explanation": "detailed 2-3 sentence explanation of the rating and why this food is at this risk level",
-  "histamine_profile": "detailed description of this food's histamine characteristics: fresh state vs aged/stored, fermentation status, typical preparation methods, how storage time affects histamine content",
-  "mechanism_details": "explain each applicable mechanism (H/A/L/B) - which ones are present, how severe they are, and which are most problematic for MCAS patients",
-  "preparation_guidance": "detailed recommendations for making this food as safe as possible - cooking methods, storage, timing, combinations to avoid, how to prepare if attempting to tolerate it",
+  "scientific_explanation": "1-2 sentence explanation of rating",
+  "histamine_profile": "How histamine changes based on freshness, storage, preparation. Specific timeframes if relevant.",
+  "mechanism_details": "Which mechanisms apply (H/A/L/B), severity for MCAS, most problematic ones",
+  "preparation_guidance": "Safe preparation methods, storage conditions, when to avoid or limit",
   "freshness_dependent": boolean,
-  "freshness_guidance": "if freshness matters, explain exactly how: how long fresh is safe, what storage temperature is needed, what signs indicate spoilage/high histamine, when to discard",
-  "safe_scenarios": "specific situations when/if it might be tolerable: only fresh, only cooked a certain way, only in small quantities, not recommended for anyone, etc.",
-  "warning_signs": "what symptoms should alert MCAS patient that they're reacting to this food, when to seek help",
-  "synthesis_notes": "how the 3 perspectives were merged into this consensus - were they in agreement, which perspective was most informative, any important nuances",
-  "recommendations": "comprehensive practical advice - is this food recommended to avoid completely, try in specific ways, or potentially tolerable for some MCAS patients",
-  "dietary_alternatives": "foods that are safer alternatives to suggest instead",
+  "safe_scenarios": "When food might be tolerable (e.g., only fresh, only frozen, not recommended)",
+  "recommendations": "Practical advice: avoid completely, try specific ways, or potentially tolerable",
+  "dietary_alternatives": "Safer alternative foods",
+  "synthesis_notes": "How 3 perspectives were merged",
   "sighi_alignment_verified": boolean
 }}"""
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            max_tokens=2000,
+            max_tokens=1200,
             messages=[{"role": "user", "content": synthesis_prompt}]
         )
 
