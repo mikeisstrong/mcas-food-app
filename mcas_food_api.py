@@ -34,6 +34,24 @@ CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPT
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
+# Helper function to handle both max_tokens and max_completion_tokens
+def create_completion(model, messages, max_tokens):
+    """Create a completion with compatibility for both parameter formats"""
+    try:
+        # Try with max_completion_tokens first (gpt-5 models)
+        return client.chat.completions.create(
+            model=model,
+            max_completion_tokens=max_tokens,
+            messages=messages
+        )
+    except TypeError:
+        # Fall back to max_tokens for older SDK versions or models
+        return client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=messages
+        )
+
 # Load SIGHI database
 with open('sighi_food_database.json', 'r') as f:
     sighi_db = json.load(f)
@@ -138,10 +156,10 @@ def assess_food_single_prompt(food_name, database_info, perspective="general"):
     prompt = generate_assessment_prompt(food_name, database_info, perspective)
 
     try:
-        response = client.chat.completions.create(
+        response = create_completion(
             model="gpt-5-mini",
-            max_completion_tokens=1000,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000
         )
 
         response_text = response.choices[0].message.content
@@ -215,10 +233,10 @@ RESPOND WITH ONLY THIS JSON:
 }}"""
 
     try:
-        response = client.chat.completions.create(
+        response = create_completion(
             model="gpt-5-mini",
-            max_completion_tokens=1200,
-            messages=[{"role": "user", "content": synthesis_prompt}]
+            messages=[{"role": "user", "content": synthesis_prompt}],
+            max_tokens=1200
         )
 
         response_text = response.choices[0].message.content
