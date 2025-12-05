@@ -1,6 +1,6 @@
 """
 MCAS Food Assessment API with LLM Integration
-Uses OpenAI GPT-5-Mini to assess foods based on SIGHI database and scientific principles
+Uses OpenAI GPT-4-Turbo to assess foods based on SIGHI database and scientific principles
 """
 
 from flask import Flask, request, jsonify
@@ -157,7 +157,7 @@ def assess_food_single_prompt(food_name, database_info, perspective="general"):
 
     try:
         response = create_completion(
-            model="gpt-5-mini",
+            model="gpt-4-turbo",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1000
         )
@@ -234,7 +234,7 @@ RESPOND WITH ONLY THIS JSON:
 
     try:
         response = create_completion(
-            model="gpt-5-mini",
+            model="gpt-4-turbo",
             messages=[{"role": "user", "content": synthesis_prompt}],
             max_tokens=1200
         )
