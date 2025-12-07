@@ -116,7 +116,7 @@ def generate_assessment_prompt(food_name, database_info):
     Generate a single unified comprehensive assessment prompt.
     Combines all 3 perspectives (general, histamine_risk, mechanism_analysis) into one optimized prompt.
     """
-    prompt = f"""You are an expert in Mast Cell Activation Syndrome (MCAS) and histamine intolerance assessment based on SIGHI protocols.
+    prompt = f"""You are a specialist in Mast Cell Activation Syndrome (MCAS) and an expert in nutritional science. You assess foods based on SIGHI protocols and their impact on mast cell stability and histamine intolerance.
 
 SIGHI Database Context:
 {database_info}
