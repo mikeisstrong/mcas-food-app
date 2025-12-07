@@ -165,7 +165,7 @@ def assess_food_single_prompt(food_name, database_info, perspective="general"):
         response = create_completion(
             model="gpt-5-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000
+            max_tokens=2000
         )
 
         response_text = response.choices[0].message.content
@@ -242,7 +242,7 @@ RESPOND WITH ONLY THIS JSON:
         response = create_completion(
             model="gpt-5-mini",
             messages=[{"role": "user", "content": synthesis_prompt}],
-            max_tokens=1200
+            max_tokens=2000
         )
 
         response_text = response.choices[0].message.content
