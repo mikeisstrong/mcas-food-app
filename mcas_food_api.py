@@ -111,12 +111,12 @@ def build_food_context():
 
     return context
 
-def generate_assessment_prompt(food_name, database_info, perspective="general"):
+def generate_assessment_prompt(food_name, database_info):
     """
-    Generate one of three different assessment prompt perspectives with detailed context but structured output
-    perspective: "general", "histamine_risk", or "mechanism_analysis"
+    Generate a single unified comprehensive assessment prompt.
+    Combines all 3 perspectives (general, histamine_risk, mechanism_analysis) into one optimized prompt.
     """
-    base_context = f"""You are an expert in Mast Cell Activation Syndrome (MCAS) and histamine intolerance assessment based on SIGHI protocols.
+    prompt = f"""You are an expert in Mast Cell Activation Syndrome (MCAS) and histamine intolerance assessment based on SIGHI protocols.
 
 SIGHI Database Context:
 {database_info}
@@ -124,25 +124,23 @@ SIGHI Database Context:
 Assess the food: {food_name}
 
 Your assessment MUST be conservative - when evidence is unclear or conflicting, always rate higher (worse) for patient safety.
-The mechanisms are: H=histamine content, A=other amines, L=mast cell liberators, B=DAO enzyme blockers."""
+The mechanisms are: H=histamine content, A=other amines, L=mast cell liberators, B=DAO enzyme blockers.
 
-    if perspective == "general":
-        specific_prompt = """Comprehensive perspective: Evaluate SIGHI database match (if exists), baseline histamine/amine content, all applicable mechanisms (H/A/L/B), preparation/storage risks, freshness sensitivity. Synthesize into a single overall risk rating (0-3). Consider whether food exists in SIGHI and align assessment accordingly. If in SIGHI, explain any divergence from database rating."""
-
-    elif perspective == "histamine_risk":
-        specific_prompt = """Histamine-focused perspective: Analyze baseline histamine levels in this food (fresh state), how histamine accumulates over time and storage conditions, which preparation/cooking methods reduce histamine (heat, freezing, etc.), impact of fermentation if applicable, shelf-life considerations. Rate based primarily on histamine risk (0-3) and identify freshness sensitivity."""
-
-    elif perspective == "mechanism_analysis":
-        specific_prompt = """Mechanism-focused perspective: Identify which biological mechanisms this food triggers (H/A/L/B - mark all applicable), severity level of each mechanism for MCAS patients (mild/moderate/severe), cross-reactivity risks with other foods, whether mechanisms are dose-dependent or always present. Rate severity of total mechanism burden (0-3)."""
-
-    prompt = base_context + "\n\n" + specific_prompt + """
+COMPREHENSIVE ASSESSMENT (combine all perspectives):
+1. Check SIGHI database match and note rating if found
+2. Analyze baseline histamine/amine content in fresh state
+3. Evaluate how histamine accumulates with storage/fermentation
+4. Identify all applicable biological mechanisms (H/A/L/B)
+5. Assess preparation/cooking effects and freshness sensitivity
+6. Consider cross-reactivity and dose-dependence
+7. Synthesize all factors into a single overall risk rating (0-3)
 
 RESPOND WITH ONLY THIS JSON (no other text):
-{
-  "food_name": "%s",
+{{
+  "food_name": "{food_name}",
   "found_in_sighi": boolean,
   "sighi_rating": 0, 1, 2, 3, or null,
-  "llm_assessment_rating": 0, 1, 2, or 3,
+  "final_rating": 0, 1, 2, or 3,
   "confidence_percentage": integer 70-95,
   "reaction_probability": "low" or "moderate" or "high" or "very-high",
   "reaction_probability_percentage": integer 0-100,
@@ -150,16 +148,19 @@ RESPOND WITH ONLY THIS JSON (no other text):
   "key_concerns": ["concern1", "concern2", "concern3"],
   "preparation_notes": "single sentence",
   "freshness_dependent": boolean,
-  "scientific_explanation": "one sentence only",
-  "recommendations": "one sentence practical advice",
-  "perspective_focus": "%s"
-}""" % (food_name, perspective)
+  "histamine_profile": "description of histamine levels and factors",
+  "mechanism_details": "summary of applicable mechanisms",
+  "safe_scenarios": "when this food is safe or safer",
+  "dietary_alternatives": "safer alternative foods",
+  "scientific_explanation": "one sentence explanation",
+  "recommendations": "practical advice for consumption"
+}}"""
 
     return prompt
 
-def assess_food_single_prompt(food_name, database_info, perspective="general"):
-    """Execute a single assessment prompt and return parsed JSON"""
-    prompt = generate_assessment_prompt(food_name, database_info, perspective)
+def assess_food_single_prompt(food_name, database_info):
+    """Execute a single unified assessment prompt and return parsed JSON"""
+    prompt = generate_assessment_prompt(food_name, database_info)
 
     try:
         response = create_completion(
@@ -261,9 +262,8 @@ RESPOND WITH ONLY THIS JSON:
 
 def assess_food_with_llm(food_name, database_info, existing_food_data=None, is_exact_match=None):
     """
-    Use 3 simultaneous AI assessments + 1 synthesizer
-    Ensures high quality, consistent, SIGHI-aligned assessments
-    Re-runs synthesis if AI disagrees with SIGHI
+    Use single unified AI assessment (optimized for speed).
+    Fast, single-call assessment combines all perspectives in one prompt.
 
     is_exact_match: Boolean indicating if existing_food_data is exact match or similar
     """
@@ -272,89 +272,37 @@ def assess_food_with_llm(food_name, database_info, existing_food_data=None, is_e
     if is_exact_match is None and existing_food_data:
         is_exact_match = (existing_food_data.get('name', '').lower() == food_name.lower())
 
-    # Execute 3 assessments in parallel
-    perspectives = ["general", "histamine_risk", "mechanism_analysis"]
-    assessments = []
+    # Execute single unified assessment
+    assessment = assess_food_single_prompt(food_name, database_info)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {
-            executor.submit(assess_food_single_prompt, food_name, database_info, p): p
-            for p in perspectives
-        }
+    # Add SIGHI alignment info if database food exists
+    if existing_food_data:
+        sighi_rating = existing_food_data.get('rating')
+        ai_rating = assessment.get('final_rating')
 
-        for future in concurrent.futures.as_completed(futures):
-            assessment = future.result()
-            assessments.append(assessment)
+        assessment['found_in_sighi'] = is_exact_match if is_exact_match is not None else True
+        assessment['sighi_reference'] = existing_food_data.get('name', food_name)
+        assessment['sighi_rating'] = sighi_rating
 
-    # Synthesize the 3 assessments into 1 master response
-    # Retry if disagreement with SIGHI
-    max_retries = 2
-    retry_count = 0
-    synthesized = None
-
-    while retry_count <= max_retries:
-        synthesized = synthesize_assessments(
-            food_name,
-            database_info,
-            assessments,
-            sighi_rating=existing_food_data.get('rating') if existing_food_data else None,
-            retry_count=retry_count,
-            is_exact_match=is_exact_match
-        )
-
-        # Check for errors in synthesis
-        if "error" in synthesized:
-            logger.warning(f"Synthesis error for {food_name}: {synthesized.get('error')}")
-            break
-
-        # SIGHI validation: check alignment
-        if existing_food_data:
-            sighi_rating = existing_food_data.get('rating')
-            ai_rating = synthesized.get('final_rating')
-
-            synthesized['found_in_sighi'] = is_exact_match if is_exact_match is not None else True
-            synthesized['sighi_reference'] = existing_food_data.get('name', food_name)
-            synthesized['sighi_rating'] = sighi_rating
-
-            if ai_rating == sighi_rating:
-                # Alignment verified!
-                synthesized['sighi_alignment_verified'] = True
-                if is_exact_match:
-                    synthesized['alignment_note'] = "AI assessment aligns with SIGHI database (exact match)"
-                else:
-                    synthesized['alignment_note'] = f"AI assessment aligns with similar SIGHI food: {existing_food_data.get('name')}"
-                logger.info(f"SIGHI alignment verified for {food_name}: rating {ai_rating}")
-                break
+        if ai_rating == sighi_rating:
+            assessment['sighi_alignment_verified'] = True
+            if is_exact_match:
+                assessment['alignment_note'] = "AI assessment aligns with SIGHI database (exact match)"
             else:
-                # Disagreement detected
-                if retry_count < max_retries:
-                    logger.warning(
-                        f"SIGHI alignment failed for {food_name}: "
-                        f"AI rated {ai_rating} but SIGHI rated {sighi_rating}. "
-                        f"Retrying synthesis (attempt {retry_count + 1}/{max_retries})"
-                    )
-                    retry_count += 1
-                else:
-                    # Max retries reached, use SIGHI rating
-                    logger.warning(
-                        f"Max retries reached for {food_name}. "
-                        f"Using SIGHI rating {sighi_rating} instead of AI rating {ai_rating}"
-                    )
-                    synthesized['sighi_alignment_verified'] = False
-                    ref_food = existing_food_data.get('name', 'database')
-                    synthesized['alignment_note'] = (
-                        f"AI initially rated {ai_rating} but SIGHI database rates {ref_food} as {sighi_rating}. "
-                        "Using SIGHI rating as ground truth."
-                    )
-                    synthesized['final_rating'] = sighi_rating
-                    break
+                assessment['alignment_note'] = f"AI assessment aligns with similar SIGHI food: {existing_food_data.get('name')}"
+            logger.info(f"SIGHI alignment verified for {food_name}: rating {ai_rating}")
         else:
-            # No SIGHI data, assessment is complete
-            break
+            assessment['sighi_alignment_verified'] = False
+            ref_food = existing_food_data.get('name', 'database')
+            assessment['alignment_note'] = (
+                f"AI rated {ai_rating} but SIGHI database rates {ref_food} as {sighi_rating}. "
+                "SIGHI rating used as ground truth."
+            )
+            assessment['final_rating'] = sighi_rating
 
     return {
-        "individual_assessments": assessments,
-        "synthesized_assessment": synthesized
+        "individual_assessments": [assessment],
+        "synthesized_assessment": assessment
     }
 
 @app.route('/api/assess-food', methods=['POST', 'OPTIONS'])
